@@ -1,0 +1,8 @@
+# Optional model stack (see docs/MODEL_SETUP.md). Not installed or tested yet.
+# Install CPU-only PyTorch first:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+# Pin exact versions after the first successful install on the model machine.
+-r requirements.txt
+transformers>=4.44
+faster-whisper>=1.0
+# pyannote.audio>=3.1   # only if the overlap model is used

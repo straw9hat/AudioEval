@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AudioEval</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <strong>AudioEval</strong>
+    <span id="method" class="muted"></span>
+    <span class="spacer"></span>
+    <span id="user" class="muted"></span>
+    <button id="logout" class="link">Sign out</button>
+  </header>
+
+  <main>
+    <section class="card" id="upload-card">
+      <h2>New evaluation batch</h2>
+      <p class="muted">Upload a folder or ZIP containing audio files and one CSV manifest
+        with columns <code>name</code> and optional <code>result_json</code>.
+        Supported audio: WAV, MP3, OGG/Opus, FLAC (more with ffmpeg).</p>
+      <div class="upload-row">
+        <label class="button">Choose folder
+          <input id="folder-input" type="file" webkitdirectory directory multiple hidden>
+        </label>
+        <label class="button">Choose ZIP or files
+          <input id="files-input" type="file" multiple accept=".zip,.csv,audio/*" hidden>
+        </label>
+        <span id="selection" class="muted">Nothing selected</span>
+      </div>
+      <div id="drop" class="drop">or drop a ZIP / files here</div>
+      <button id="start" disabled>Upload and analyze</button>
+      <progress id="upload-progress" max="100" value="0" hidden></progress>
+      <p id="upload-error" class="error" role="alert"></p>
+    </section>
+
+    <section class="card" id="job-card" hidden>
+      <div class="job-head">
+        <h2>Batch <span id="job-id"></span></h2>
+        <span id="job-status" class="badge"></span>
+        <span class="spacer"></span>
+        <button id="resume" hidden>Resume</button>
+        <a id="dl-csv" class="button">predictions.csv</a>
+        <a id="dl-json" class="button">results.json</a>
+        <a id="dl-err" class="button">errors.csv</a>
+      </div>
+      <progress id="job-progress" max="100" value="0"></progress>
+      <p id="job-summary" class="muted"></p>
+      <div id="job-messages"></div>
+      <div id="score"></div>
+      <div class="filters">
+        <label>Show
+          <select id="filter">
+            <option value="all">all files</option>
+            <option value="failed">failed</option>
+            <option value="done">completed</option>
+            <option value="mismatch">label mismatches</option>
+            <option value="warn">with warnings</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table id="results">
+          <thead>
+            <tr>
+              <th>File</th><th>Status</th><th>Tone</th><th>Intensity</th><th>Noise</th><th>Noise type</th>
+              <th>Severity</th><th>Quality</th><th>Overlap</th><th>Long silence</th><th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="muted small">When labels are present, mismatching cells show the expected value below the prediction.</p>
+    </section>
+
+    <section class="card">
+      <h2>Previous batches</h2>
+      <ul id="job-list" class="job-list"></ul>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

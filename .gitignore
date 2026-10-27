@@ -1,0 +1,31 @@
+# Confidential call audio, manifests, and uploaded batches must never be committed.
+*.wav
+*.mp3
+*.ogg
+*.oga
+*.opus
+*.flac
+*.m4a
+*.aac
+*.wma
+*.webm
+*.amr
+*.zip
+*.pdf
+labels.csv
+data/
+uploads/
+jobs/
+
+# Model weights are downloaded separately (see docs/MODEL_SETUP.md).
+models/*
+!models/README.md
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
