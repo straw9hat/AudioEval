@@ -16,7 +16,7 @@ WORKDIR /app
 COPY requirements.txt requirements-ml.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$INSTALL_ML" = "true" ]; then \
-         pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu \
+         pip install --no-cache-dir torch==2.11.0+cpu torchaudio==2.11.0+cpu --index-url https://download.pytorch.org/whl/cpu \
          && pip install --no-cache-dir -r requirements-ml.txt; \
        fi
 

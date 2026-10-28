@@ -11,16 +11,19 @@ download the results as CSV or JSON.
 | --- | --- |
 | [PLAN.md](PLAN.md) | Requirements, acceptance criteria, delivery plan |
 | [docs/TECHNICAL_MEMO.md](docs/TECHNICAL_MEMO.md) | Approaches, architecture, ambiguity handling, limitations, production path |
-| [docs/MODEL_SETUP.md](docs/MODEL_SETUP.md) | How to add the pretrained models (not yet downloaded) |
+| [docs/MODEL_SETUP.md](docs/MODEL_SETUP.md) | Pinned local model setup and experiment commands |
 | [reports/validation.md](reports/validation.md) | Predictions for supplied calls, metrics, confusion matrix |
 | [reports/cost_latency.md](reports/cost_latency.md) | Measured runtime and cost per audio minute |
+| [predictions/supplied_calls.csv](predictions/supplied_calls.csv) | Baseline predictions for all supplied calls |
 
 ## Status
 
 - Working now: acoustic baseline, CLI, authenticated dashboard, batch validation, background
-  processing, downloads, scoring, Docker image definition, 53 automated tests.
-- Not done yet: pretrained models (adapters written, weights not downloaded), hosted
-  deployment, calibration (needs labeled data). See [docs/MODEL_SETUP.md](docs/MODEL_SETUP.md).
+  processing, downloads, scoring, optional local models, Docker image definition, 53 tests.
+- Model experiments E1-E4 and E6 ran locally; these are fixture comparisons on only three
+  calls, not independent validation. The default remains the inexpensive acoustic baseline.
+- Not done yet: Docker image build, hosted deployment, independent validation data, gated E5,
+  and confidence calibration. See [docs/MODEL_SETUP.md](docs/MODEL_SETUP.md).
 
 ## Output schema
 
@@ -38,7 +41,7 @@ severity `none|low|medium|high`; quality `clear|slightly_impaired|severely_impai
 ## Setup (Windows PowerShell)
 
 ```powershell
-py -3.13 -m venv .venv            # Python 3.11+ should work; 3.13 was used for development
+py -3.14 -m venv .venv            # Python 3.11+ should work; 3.14.2 was tested
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
 ```
@@ -98,6 +101,23 @@ $env:AUDIOEVAL_COOKIE_SECURE = 'false'                      # plain-HTTP localho
 
 Open http://127.0.0.1:8000, sign in, choose a folder or ZIP, and select **Upload and analyze**.
 Progress, per-file status, errors, label comparisons, and downloads appear on the same page.
+
+### Short review walkthrough
+
+1. Sign in with the dedicated evaluator account; do not show or record the password.
+2. Upload an approved batch containing audio files and its CSV manifest.
+3. Show validation, per-file progress, and the difference between successful predictions
+   and file errors.
+4. Open a result and point out the nine-field schema, evidence, and confidence caveat.
+   Label comparisons are scoring output; labels are not inference input.
+5. Download the predictions CSV and errors report. Explain that model comparisons on the
+   three supplied calls are descriptive only and that the acoustic baseline remains default.
+6. If the hosted app is unavailable, use the local CLI command and the saved
+   [validation report](reports/validation.md) and [baseline export](predictions/supplied_calls.csv).
+
+Do not record supplied confidential calls, credentials, or evaluator data unless the
+recipient, storage, and retention are approved. A dashboard fallback recording still
+needs to be made after an approved deployment, preferably with approved synthetic audio.
 
 ## Deployment
 

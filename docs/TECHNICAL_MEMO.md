@@ -8,23 +8,31 @@ required nine-field JSON for each clip. It has two layers:
 1. A **deterministic acoustic baseline** (implemented, tested, measured) that handles
    silence, technical quality, impulsive/sustained background noise, two-channel overlap,
    and emotional intensity from prosody.
-2. **Optional local models** (adapters implemented, not yet run): speech emotion
-   recognition, transcript emotion, AudioSet event tagging, and overlap detection. They
-   fill the baseline's known gaps, mainly valence and noise under speech.
+2. **Optional local models** (pinned weights downloaded and E1-E4/E6 executed):
+   speech emotion recognition, transcript emotion, AudioSet event tagging, and a gated
+   overlap detector. They address valence and noise under speech, with limited fixture
+   improvements so far.
 
-All processing is local. No external API is used and no call audio leaves the host.
+Inference is local; no external inference API is used and no call audio leaves the host.
+The model files were downloaded from Hugging Face at immutable revisions listed in
+[MODEL_SETUP.md](MODEL_SETUP.md).
 
 ## Approaches tested
 
-| Approach | Status | Result |
+| Approach | Status | Result on the three supplied fixtures |
 | --- | --- | --- |
-| A. Acoustic features + rules (E0) | Implemented and measured | RTF 0.0046; tone 1/3 (always neutral), noise 2/3, quality 3/3, overlap 2/3, silence 3/3 on the supplied calls |
-| B. Pretrained audio models (SER + AST + optional overlap) | Code ready, weights not downloaded | Not measured |
-| C. ASR + transcript emotion, fused with B | Code ready, weights not downloaded | Not measured |
+| A. Acoustic features + rules (E0) | Implemented and measured | RTF 0.0070; tone accuracy 1/3, macro F1 0.167; noise presence 2/3 |
+| B. AudioSet events (E1) | Downloaded, loaded, and measured | RTF 0.0763; tone unchanged; noise presence 3/3, but call_002 type/severity were wrong |
+| C. Speech emotion (E2) | Downloaded, loaded, and measured | RTF 0.0669; tone accuracy 1/3, macro F1 0.222; one corrected upset and one false upset |
+| D. Whisper-small + GoEmotions (E3) | Downloaded, loaded, and measured | RTF 0.1592; no aggregate fixture accuracy gain |
+| E. Full fusion (E4) | Downloaded, loaded, and measured | RTF 0.3595; no tone gain; only noise-presence fixture gain |
+| F. Full fusion + Whisper-base (E6) | Downloaded, loaded, and measured | RTF 0.2527; same fixture predictions as E4 |
 
-The brief asks for at least two materially different approaches. A is complete; B and C
-are the second and third and must be run before submission (see [MODEL_SETUP.md](MODEL_SETUP.md)).
-A trivial majority-class predictor is equivalent to A's tone output on these calls.
+These are descriptive fixture comparisons, not generalization results: only three calls
+are labeled, classes are missing, and model choices were not tuned on independent data.
+Keep the baseline as the default. Do not select or calibrate a model from these three
+examples; first obtain an approved grouped holdout. E5 remains unrun because its model is
+gated.
 
 ## Final architecture
 
@@ -79,12 +87,13 @@ separate held-out set before use.
 
 - Validation: [reports/validation.md](../reports/validation.md). Three clips are fixtures, not
   validation; results are descriptive.
-- Cost and latency: [reports/cost_latency.md](../reports/cost_latency.md). Baseline RTF 0.0046
-  on a desktop CPU, well under $0.003 per audio minute on any reasonable instance.
+- Cost and latency: [reports/cost_latency.md](../reports/cost_latency.md). E0 RTF 0.0070
+  and E6 RTF 0.2527 on the local CPU; costs use a $0.05/hour assumption, not a host quote.
+  At 10% utilization E6 estimates to $0.002106/audio-minute; at 2% it exceeds the ceiling.
 
 ## Failure modes and limitations
 
-- Tone is effectively unsupported until models are added.
+- Tone remains weak: model additions did not improve full-fusion accuracy on these fixtures.
 - Noise under continuous speech (TV, music) is missed by the baseline.
 - Single-channel overlap detection is weak (confidence capped at 0.6).
 - Customer and agent are not separated on mono or dual-mono audio.
@@ -95,12 +104,13 @@ separate held-out set before use.
 
 ## Next steps for accuracy
 
-1. Download models and run E1-E6 ([MODEL_SETUP.md](MODEL_SETUP.md)); pick the best
-   configuration under the cost ceiling.
-2. Obtain approved labeled calls covering all five tones and more noise types; build a
+1. Obtain approved labeled calls covering all five tones and more noise types; build a
    grouped (by caller/call) validation split; tune thresholds and the text weight there.
-3. Calibrate confidence on that data.
-4. Add diarization or use stereo recordings to analyze only the customer.
+2. Measure the selected candidates on the target host at expected utilization; choose a
+   configuration only if it improves held-out quality and meets the cost ceiling with margin.
+3. Calibrate confidence on independent data.
+4. Add diarization or use stereo recordings to analyze only the customer; run E5 only if
+   its gated model access and license are approved.
 
 ## Path to production integration
 
@@ -116,5 +126,8 @@ separate held-out set before use.
 
 ## External services disclosure
 
-None. All inference runs on the host. Model weights are downloaded once from Hugging Face
-on a separate machine; no call audio is uploaded anywhere.
+No paid inference API is used. The pinned public model weights were downloaded from
+Hugging Face to local, git-ignored directories; inference runs on this host and supplied
+call audio is not uploaded to Hugging Face or another service. The $0.05/hour compute
+price used in the reports is an estimate, not a provider quote. Confirm model-card terms
+and deployment data-location requirements before production use.

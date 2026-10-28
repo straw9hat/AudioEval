@@ -27,19 +27,21 @@ implementation choices or improvements, not additional assessment obligations.
 
 | Deliverable | Status | Where |
 | --- | --- | --- |
-| D01 Hosted dashboard + login | Built and tested locally; **not deployed** | [audioeval/web.py](audioeval/web.py), README "Deployment" |
-| D02 Runnable repo + instructions | Done (venv, CLI, Dockerfile not yet built) | [README.md](README.md) |
+| D01 Hosted dashboard + login | Built and tested locally; **not deployed** (no host/account configured) | [audioeval/web.py](audioeval/web.py), README "Deployment" |
+| D02 Runnable repo + instructions | Done; Dockerfile provided but image not built (Docker unavailable) | [README.md](README.md) |
 | D03 Batch upload workflow | Done: folder/ZIP/multi-ZIP, validation, progress, per-file errors, downloads | [audioeval/batch.py](audioeval/batch.py), [audioeval/jobs.py](audioeval/jobs.py) |
-| D04 Predictions for supplied calls | Done for the acoustic baseline | [reports/validation.md](reports/validation.md) |
-| D05 Technical memo | Draft; needs model results | [docs/TECHNICAL_MEMO.md](docs/TECHNICAL_MEMO.md) |
-| D06 Validation + confusion matrix | Baseline done; model experiments pending | [reports/validation.md](reports/validation.md) |
-| D07 Cost analysis | Baseline measured; model stack pending | [reports/cost_latency.md](reports/cost_latency.md) |
-| D08 Latency analysis | Baseline measured (RTF 0.0046, desktop CPU) | [reports/cost_latency.md](reports/cost_latency.md) |
-| D09 Failure modes and next steps | Done for baseline | [docs/TECHNICAL_MEMO.md](docs/TECHNICAL_MEMO.md) |
+| D04 Predictions for supplied calls | Done; reproducible baseline and E6 exports | [predictions/](predictions), [reports/validation.md](reports/validation.md) |
+| D05 Technical memo | Updated with E0-E4/E6 results and conservative default | [docs/TECHNICAL_MEMO.md](docs/TECHNICAL_MEMO.md) |
+| D06 Validation + confusion matrix | Descriptive baseline/model results; independent validation still needs more labels | [reports/validation.md](reports/validation.md) |
+| D07 Cost analysis | Local model costs measured; deployment price/utilization not supplied | [reports/cost_latency.md](reports/cost_latency.md) |
+| D08 Latency analysis | E0-E4/E6 measured on local CPU; deployment latency unknown | [reports/cost_latency.md](reports/cost_latency.md) |
+| D09 Failure modes and next steps | Updated for baseline and model experiments | [docs/TECHNICAL_MEMO.md](docs/TECHNICAL_MEMO.md) |
 
-Remaining work, in order: download models and run experiments E1-E6
-([docs/MODEL_SETUP.md](docs/MODEL_SETUP.md)); build the Docker image; deploy with HTTPS
-and evaluator credentials; finalize the memo and reports; prepare the walkthrough.
+Remaining work: build/test the Docker image on a machine with Docker; obtain an approved
+host, evaluator credential-delivery channel, and expected workload; deploy with HTTPS;
+obtain independent labeled data and validate/calibrate; optionally run gated E5 if approved;
+prepare the live walkthrough and fallback recording. Model setup and E1-E4/E6 experiments
+are complete locally. The baseline remains the default pending independent evidence.
 
 ### Available Evidence
 
@@ -63,8 +65,9 @@ and evaluator credentials; finalize the memo and reports; prepare the walkthroug
   audio-quality factor. Treat static as ambiguous between noise and quality, and
   document how the system decides. Noise types use short free text ("TV" rather than
   "television"), so wording varies.
-- Speaker roles and actual audio content still need listening review. No accuracy,
-  latency, or cost measurements exist.
+- Speaker roles and actual audio content still need listening review. E0-E4/E6 fixture
+  agreement and local CPU latency/cost estimates are recorded in the reports; none
+  establishes generalization or hosted production cost.
 
 ## 2. Success Criteria and Scoring
 
@@ -149,29 +152,30 @@ it silently. Reject multiple CSVs at the root as ambiguous.
 
 The submission checklist maps to all nine deliverables in brief section 6:
 
-- [ ] D01: Hosted dashboard, URL, and working evaluator login.
-- [ ] D02: Runnable implementation/repository with setup, deployment, and execution instructions.
-- [ ] D03: Batch folder/ZIP upload, validation, progress/errors, and structured downloads.
-- [ ] D04: Schema-compliant predictions for the three supplied calls.
-- [ ] D05: Short technical memo covering approaches tested, final architecture, and rationale.
-- [ ] D06: Validation results, metric definitions, per-class results where possible, and confusion matrix.
-- [ ] D07: Cost per audio minute with assumptions and ceiling compliance.
-- [ ] D08: Latency per audio minute or clip, distinguishing measurements from estimates.
-- [ ] D09: Failure modes, limitations, and next steps for accuracy improvements.
+- [ ] D01: Hosted dashboard, URL, and working evaluator login (deployment/credentials pending).
+- [x] D02: Runnable implementation/repository with setup, deployment, and execution instructions.
+- [x] D03: Batch folder/ZIP upload, validation, progress/errors, and structured downloads.
+- [x] D04: Schema-compliant predictions for the three supplied calls.
+- [x] D05: Short technical memo covering approaches tested, architecture, and rationale.
+- [x] D06: Descriptive validation results, metric definitions, per-class results, and confusion matrix;
+      independent labeled validation remains unavailable.
+- [x] D07: Cost per audio minute with assumptions and ceiling analysis; production host costs remain unknown.
+- [x] D08: Local latency per audio minute, distinguished from deployment estimates.
+- [x] D09: Failure modes, limitations, and next steps for accuracy improvements.
 
 Additional required content, drawn from other sections of the brief:
 
-- [ ] Memo explains how ambiguous emotional tone and low-level background noise are
+- [x] Memo explains how ambiguous emotional tone and low-level background noise are
       handled (section 9).
-- [ ] Memo describes how confidence was calibrated (section 9).
-- [ ] Memo gives a reasonable path to production integration (section 12, success
+- [x] Memo states confidence is uncalibrated and describes the calibration method and
+      independent-data requirement (section 9).
+- [x] Memo gives a reasonable path to production integration (section 12, success
       definition): batch API or storage-triggered processing, authentication, data
       retention, scaling, and monitoring. This is not only an optional backlog item.
-- [ ] Memo discloses any external paid API, model, pricing, retention, and data
+- [x] Memo discloses paid API usage, local models, assumed compute pricing, retention, and data
       location (section 11).
-- [ ] Walkthrough prepared on methodology, experiments, tradeoffs, and what would
-      change with more data or time (section 10). Have a short live demo script and
-      a fallback recording of the dashboard in case hosting fails during review.
+- [ ] Walkthrough script is in README; live hosted demo and private fallback recording
+      remain pending deployment and approved recording/storage arrangements.
 
 Recommended repository layout for the deliverables, so they are easy to find:
 `docs/memo.md`, `reports/validation.md`, `reports/cost.md`, `reports/latency.md`,
@@ -418,7 +422,8 @@ Record one row per candidate before selecting the final pipeline:
 
 | Experiment | Model/version and configuration | Data/split | Metrics and support | Cost/audio minute | Runtime/audio minute | Privacy approval | Decision |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Baseline | TBD | Supplied fixtures; not independent validation | Not measured | Not measured | Not measured | TBD | Pending |
+| E0-E4, E6 | Immutable model revisions in [MODEL_SETUP.md](docs/MODEL_SETUP.md); configurations/results in [validation report](reports/validation.md) | Three supplied calls; fixtures only, no independent split | Recorded with n=3; missing tone-class support disclosed | Assumed $0.05/h; utilization scenarios in [cost report](reports/cost_latency.md) | Measured local CPU RTFs in cost report | Inference local; model-card license metadata reviewed; production use approval pending | Keep baseline default; do not select a model without independent validation and actual host pricing |
+| E5 | Gated pyannote overlap model | Not run | Not measured | Not measured | Not measured | Gated access/license not established | Pending approval and access |
 
 For each later improvement, record: hypothesis, affected requirement, dataset and
 split, expected benefit, measured result, cost/latency impact, decision, and rollback
