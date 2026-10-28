@@ -71,6 +71,20 @@ def test_bad_login_and_rate_limit(client):
     assert client.post("/api/login", json={"username": "eval", "password": "correct horse battery"}).status_code == 429
 
 
+def test_rate_limit_ignores_spoofed_forwarded_for(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIOEVAL_USERS", f"eval:{hash_password('correct horse battery', 1000)}")
+    monkeypatch.setenv("AUDIOEVAL_TRUST_PROXY", "true")
+    settings = Settings(data_dir=str(tmp_path / "jobs"))
+    with TestClient(create_app(settings, analyzer_factory=lambda: None), base_url=BASE) as c:
+        for i in range(5):
+            headers = {"x-forwarded-for": f"10.0.0.{i}, 203.0.113.9"}
+            assert c.post("/api/login", json={"username": f"u{i}", "password": "x"}, headers=headers).status_code == 401
+        headers = {"x-forwarded-for": "10.9.9.9, 203.0.113.9"}
+        assert c.post("/api/login", json={"username": "eval", "password": "correct horse battery"}, headers=headers).status_code == 429
+        headers = {"x-forwarded-for": "198.51.100.1"}
+        assert c.post("/api/login", json={"username": "eval", "password": "correct horse battery"}, headers=headers).status_code == 200
+
+
 def test_login_requires_json(client):
     assert client.post("/api/login", data={"username": "eval", "password": "x"}).status_code == 415
 

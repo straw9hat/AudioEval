@@ -38,6 +38,7 @@ def create_app(settings: Settings | None = None, analyzer_factory=None) -> FastA
         log.warning("AUDIOEVAL_SECRET_KEY not set: using a random key; sessions end on restart")
         secret = secrets.token_urlsafe(32)
     secure_cookie = os.environ.get("AUDIOEVAL_COOKIE_SECURE", "true").lower() not in {"0", "false", "no"}
+    trust_proxy = os.environ.get("AUDIOEVAL_TRUST_PROXY", "false").lower() in {"1", "true", "yes", "on"}
     limiter = LoginLimiter()
     jobs = JobManager(settings, analyzer_factory or (lambda: Analyzer(settings)))
 
@@ -75,6 +76,14 @@ def create_app(settings: Settings | None = None, analyzer_factory=None) -> FastA
         token = request.session.get("csrf")
         if not token or not secrets.compare_digest(token, request.headers.get("x-csrf-token", "")):
             raise HTTPException(403, "invalid CSRF token")
+
+    def client_ip(request: Request) -> str:
+        # Only the rightmost hop is added by the platform proxy; earlier hops are client-supplied.
+        if trust_proxy:
+            hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
+            if hops:
+                return hops[-1]
+        return request.client.host if request.client else "unknown"
 
     def owned_job(request: Request, job_id: str) -> dict:
         try:
@@ -115,8 +124,7 @@ def create_app(settings: Settings | None = None, analyzer_factory=None) -> FastA
         body = await request.json()
         username = str(body.get("username", ""))[:128]
         password = str(body.get("password", ""))[:1024]
-        ip = request.client.host if request.client else "unknown"
-        keys = (f"user:{username}", f"ip:{ip}")
+        keys = (f"user:{username}", f"ip:{client_ip(request)}")
         if limiter.blocked(*keys):
             raise HTTPException(429, "too many failed attempts; try again later")
         ok = await run_in_threadpool(authenticate, users, username, password)

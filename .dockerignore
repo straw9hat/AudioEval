@@ -14,9 +14,14 @@ output
 *.wav
 *.mp3
 *.ogg
+*.oga
 *.opus
 *.flac
 *.m4a
+*.aac
+*.wma
+*.webm
+*.amr
 *.zip
 *.pdf
 *.csv

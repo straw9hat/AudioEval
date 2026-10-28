@@ -19,7 +19,7 @@ download the results as CSV or JSON.
 ## Status
 
 - Working now: acoustic baseline, CLI, authenticated dashboard, batch validation, background
-  processing, downloads, scoring, optional local models, Docker image definition, 53 tests.
+  processing, downloads, scoring, optional local models, Docker image definition, 54 tests.
 - Model experiments E1-E4 and E6 ran locally; these are fixture comparisons on only three
   calls, not independent validation. The default remains the inexpensive acoustic baseline.
 - Not done yet: Docker image build, hosted deployment, independent validation data, gated E5,
@@ -142,8 +142,9 @@ Requirements for the host:
 - **Upload size and timeouts**: check the platform's request-body limit and ingress timeout
   against the largest expected batch (`AUDIOEVAL_MAX_UPLOAD_MB`, default 2048). Analysis
   runs in the background, so only the upload itself must fit within the timeout.
-- **Proxy headers**: the image trusts `X-Forwarded-For` so login rate limiting sees client
-  IPs behind the platform proxy. Do not expose the container directly without a proxy.
+- **Proxy headers**: the image sets `AUDIOEVAL_TRUST_PROXY=true`, so login rate limiting uses
+  the rightmost `X-Forwarded-For` hop (the one the platform proxy appends; earlier hops are
+  client-controlled). Do not expose the container directly without a proxy.
 - **Models**: mount `models/` read-only and set the `AUDIOEVAL_*_MODEL` paths.
 
 Example for Azure Container Apps (not run; review names, region, and cost first):
@@ -160,7 +161,10 @@ az containerapp create -g rg-audioeval -n audioeval --environment audioeval-env 
   --env-vars AUDIOEVAL_USERS=secretref:users AUDIOEVAL_SECRET_KEY=secretref:secret-key
 ```
 
-Add an Azure Files volume at `/data` for job persistence across restarts.
+Add an Azure Files (SMB) volume at `/data` for job persistence across restarts. The container
+runs as uid 10001, so set the volume's mount options to
+`uid=10001,gid=10001,dir_mode=0700,file_mode=0600`, or the app cannot write to the share.
+Container Apps ingress times out requests after 240 seconds, which bounds upload size.
 
 ## Configuration
 
@@ -176,6 +180,7 @@ All settings are `AUDIOEVAL_*` environment variables; see [.env.example](.env.ex
 | `AUDIOEVAL_WORKERS` | 2 | Files processed in parallel |
 | `AUDIOEVAL_RETENTION_HOURS` | 72 | Jobs and results deleted after this |
 | `AUDIOEVAL_KEEP_AUDIO` | false | Keep raw audio after a job finishes |
+| `AUDIOEVAL_TRUST_PROXY` | false (true in image) | Take client IP from the rightmost `X-Forwarded-For` hop |
 | `AUDIOEVAL_*_MODEL` | (none) | Local model directories |
 
 ## Security and privacy

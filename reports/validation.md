@@ -72,7 +72,7 @@ Full per-class metrics and confusion matrices for every field are in `results.js
 
 ## Synthetic tests
 
-`pytest` (53 tests) checks behavior the supplied calls cannot: long silence, clipping, low
+`pytest` (54 tests) checks behavior the supplied calls cannot: long silence, clipping, low
 volume (quality issue, not noise), impulsive noise, two-channel overlap, dual-mono handling,
 WAV/MP3/OGG Vorbis/OGG Opus/FLAC at 16/44.1/48 kHz, corrupt files, and loudness without
 valence evidence staying `neutral`.
