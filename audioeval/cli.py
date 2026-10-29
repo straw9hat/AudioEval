@@ -13,11 +13,11 @@ import time
 from pathlib import Path
 
 from .audio import AudioDecodeError
-from .batch import BatchError, _unwrap, plan_batch, stage_upload
+from .batch import BatchError, plan_batch, stage_upload, unwrap_single_folder
 from .calibration import Calibrator, brier_and_ece, fit_isotonic, is_correct
 from .config import Settings
 from .cost import CEILING_PER_MIN, cost_table
-from .export import errors_csv, predictions_csv, results_json
+from .export import errors_csv, predictions_csv, results_json, summarize
 from .schema import SchemaError, parse_label, validate_prediction
 from .scoring import score
 
@@ -32,9 +32,10 @@ def _run_batch(input_path: Path, out_dir: Path, settings: Settings) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         if input_path.is_file():
             with input_path.open("rb") as fh:
-                root, skipped, errors = stage_upload([(input_path.name, fh)], Path(tmp), 1 << 40, settings.max_files)
+                # Local files are the operator's own; the web upload size limit does not apply.
+                root, skipped, errors = stage_upload([(input_path.name, fh)], Path(tmp), sys.maxsize, settings.max_files)
         else:
-            root, skipped, errors = _unwrap(input_path), [], []
+            root, skipped, errors = unwrap_single_folder(input_path), [], []
         plan = plan_batch(root)
         for msg in errors + plan.errors:
             print(f"ERROR: {msg}", file=sys.stderr)
@@ -55,15 +56,16 @@ def _run_batch(input_path: Path, out_dir: Path, settings: Settings) -> dict:
             print(f"[{i}/{len(plan.items)}] {it.name}: {row['status']}" + (f" ({row['error']})" if row.get("error") else ""))
             items.append(row)
     pairs = [(r["name"], r["prediction"], r["label"]) for r in items if r["status"] == "done" and r.get("label")]
-    audio_s = sum(r["details"]["audio"]["duration_s"] for r in items if r.get("details"))
-    proc_s = sum(r["details"]["timings"]["total_s"] for r in items if r.get("details"))
-    job = {"id": "cli", "created": time.strftime("%Y-%m-%dT%H:%M:%S"), "method": analyzer.method,
-           "summary": {"total": len(items), "done": sum(r["status"] == "done" for r in items),
-                       "failed": sum(r["status"] == "failed" for r in items), "audio_minutes": round(audio_s / 60, 3),
-                       "processing_s": round(proc_s, 3), "wall_s": round(time.perf_counter() - start, 3),
-                       "real_time_factor": round(proc_s / audio_s, 4) if audio_s else None},
-           "warnings": plan.warnings + errors + plan.errors, "skipped": skipped + plan.skipped, "items": items,
-           "score": score(pairs) if pairs else None}
+    job = {
+        "id": "cli",
+        "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "method": analyzer.method,
+        "summary": summarize(items) | {"wall_s": round(time.perf_counter() - start, 3)},
+        "warnings": plan.warnings + errors + plan.errors,
+        "skipped": skipped,
+        "items": items,
+        "score": score(pairs) if pairs else None,
+    }
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "predictions.csv").write_text(predictions_csv(items), encoding="utf-8", newline="")
     (out_dir / "errors.csv").write_text(errors_csv(items), encoding="utf-8", newline="")
@@ -116,12 +118,25 @@ def cmd_benchmark(args, settings):
     if not rtf:
         print("no audio processed", file=sys.stderr)
         return 1
-    per_file = [{"name": r["name"], "duration_s": r["details"]["audio"]["duration_s"],
-                 "timings": r["details"]["timings"], "rtf": r["details"]["real_time_factor"]}
-                for r in job["items"] if r.get("details")]
-    report = {"method": job["method"], "summary": job["summary"], "per_file": per_file,
-              "hourly_price_assumed": args.hourly_price, "concurrency": args.concurrency,
-              "cost": cost_table(rtf, args.hourly_price, args.concurrency), "ceiling_per_audio_minute": CEILING_PER_MIN}
+    per_file = [
+        {
+            "name": r["name"],
+            "duration_s": r["details"]["audio"]["duration_s"],
+            "timings": r["details"]["timings"],
+            "rtf": r["details"]["real_time_factor"],
+        }
+        for r in job["items"]
+        if r.get("details")
+    ]
+    report = {
+        "method": job["method"],
+        "summary": job["summary"],
+        "per_file": per_file,
+        "hourly_price_assumed": args.hourly_price,
+        "concurrency": args.concurrency,
+        "cost": cost_table(rtf, args.hourly_price, args.concurrency),
+        "ceiling_per_audio_minute": CEILING_PER_MIN,
+    }
     (Path(args.out) / "benchmark.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
     return 0

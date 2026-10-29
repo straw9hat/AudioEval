@@ -11,13 +11,21 @@ import threading
 import time
 
 ITERATIONS = 600_000
+MAX_TRACKED_KEYS = 10_000
+
+
+def _b64encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def _b64decode(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
 
 def hash_password(password: str, iterations: int = ITERATIONS) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
-    b64 = lambda b: base64.urlsafe_b64encode(b).decode().rstrip("=")  # noqa: E731
-    return f"pbkdf2_sha256${iterations}${b64(salt)}${b64(digest)}"
+    return f"pbkdf2_sha256${iterations}${_b64encode(salt)}${_b64encode(digest)}"
 
 
 def verify_password(password: str, encoded: str) -> bool:
@@ -25,9 +33,8 @@ def verify_password(password: str, encoded: str) -> bool:
         algo, iters, salt, digest = encoded.split("$")
         if algo != "pbkdf2_sha256":
             return False
-        pad = lambda s: base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))  # noqa: E731
-        candidate = hashlib.pbkdf2_hmac("sha256", password.encode(), pad(salt), int(iters))
-        return hmac.compare_digest(candidate, pad(digest))
+        candidate = hashlib.pbkdf2_hmac("sha256", password.encode(), _b64decode(salt), int(iters))
+        return hmac.compare_digest(candidate, _b64decode(digest))
     except (ValueError, TypeError):
         return False
 
@@ -66,6 +73,11 @@ class LoginLimiter:
 
     def fail(self, *keys: str) -> None:
         with self._lock:
+            if len(self._failures) > MAX_TRACKED_KEYS:
+                # Many distinct usernames/IPs would otherwise grow this dict without bound.
+                for key in list(self._failures):
+                    if not self._recent(key):
+                        del self._failures[key]
             for k in keys:
                 self._recent(k).append(time.time())
 

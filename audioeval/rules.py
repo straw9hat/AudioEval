@@ -99,9 +99,11 @@ def decide_noise(cf: CallFeatures, event_cov: dict[str, float] | None, s: Settin
     low_snr = enough_bg and cf.snr_db < s.noise_snr_db and cf.bg_active_ratio >= s.noise_active_ratio / 2
     acoustic_present = sustained or impulsive or low_snr
     ev = {
-        "bg_active_ratio": round(cf.bg_active_ratio, 3), "bg_transient_rate_per_min": round(cf.bg_transient_rate, 2),
+        "bg_active_ratio": round(cf.bg_active_ratio, 3),
+        "bg_transient_rate_per_min": round(cf.bg_transient_rate, 2),
         "background_seconds": round(cf.background_seconds, 1),
-        "snr_db": round(cf.snr_db, 1), "acoustic_present": acoustic_present,
+        "snr_db": round(cf.snr_db, 1),
+        "acoustic_present": acoustic_present,
     }
     if impulsive and cf.bg_voicing <= 0.5:
         acoustic_type = "static"
@@ -173,8 +175,13 @@ def decide_quality(cf: CallFeatures, s: Settings) -> Decision:
         _margin_conf(cf.dropout_rate, s.dropout_slight, 1.0),
         _margin_conf(cf.speech_level_db, s.low_volume_db, 4.0),
     ]
-    ev = {"issues": issues, "clip_fraction": round(cf.clip_fraction, 5), "dropouts_per_min": round(cf.dropout_rate, 2),
-          "speech_level_dbfs": round(cf.speech_level_db, 1), "speech_rolloff_hz": round(cf.speech_rolloff_hz, 0)}
+    ev = {
+        "issues": issues,
+        "clip_fraction": round(cf.clip_fraction, 5),
+        "dropouts_per_min": round(cf.dropout_rate, 2),
+        "speech_level_dbfs": round(cf.speech_level_db, 1),
+        "speech_rolloff_hz": round(cf.speech_rolloff_hz, 0),
+    }
     # Robotic audio, echo, and codec artifacts are not measured by the baseline.
     return Decision(value, min(margins) * 0.85, ev)
 
@@ -184,20 +191,28 @@ def decide_overlap(cf: CallFeatures, overlap_s: float | None, s: Settings) -> De
         speech_s = max(cf.speech_ratio * cf.duration_s, 1e-6)
         ratio = overlap_s / speech_s
         present = overlap_s >= 1.0 and ratio >= 0.02
-        return Decision(present, _margin_conf(ratio, 0.02, 0.01, cap=0.9),
-                        {"method": "overlap_model", "overlap_s": round(overlap_s, 2), "ratio": round(ratio, 4)})
+        return Decision(
+            present,
+            _margin_conf(ratio, 0.02, 0.01, cap=0.9),
+            {"method": "overlap_model", "overlap_s": round(overlap_s, 2), "ratio": round(ratio, 4)},
+        )
     if cf.overlap_method == "two_channel_vad":
         thr, cap = s.overlap_ratio_two_channel, 0.9
     else:
         thr, cap = s.overlap_ratio_single, 0.6  # weak heuristic on mixed single-channel audio
-    return Decision(cf.overlap_ratio >= thr, _margin_conf(cf.overlap_ratio, thr, 0.02, cap=cap),
-                    {"method": cf.overlap_method, "ratio": round(cf.overlap_ratio, 4)})
+    return Decision(
+        cf.overlap_ratio >= thr,
+        _margin_conf(cf.overlap_ratio, thr, 0.02, cap=cap),
+        {"method": cf.overlap_method, "ratio": round(cf.overlap_ratio, 4)},
+    )
 
 
 def decide_silence(cf: CallFeatures, s: Settings) -> Decision:
-    return Decision(cf.longest_silence_s >= s.long_silence_s,
-                    _margin_conf(cf.longest_silence_s, s.long_silence_s, 1.5),
-                    {"longest_silence_s": round(cf.longest_silence_s, 2), "threshold_s": s.long_silence_s})
+    return Decision(
+        cf.longest_silence_s >= s.long_silence_s,
+        _margin_conf(cf.longest_silence_s, s.long_silence_s, 1.5),
+        {"longest_silence_s": round(cf.longest_silence_s, 2), "threshold_s": s.long_silence_s},
+    )
 
 
 def overall_confidence(decisions: dict[str, Decision]) -> float:

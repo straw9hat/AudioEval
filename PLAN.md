@@ -16,12 +16,14 @@ this repository or submitted to any analysis service.
 **Confidentiality of the brief and this repository:** the brief is marked "AutoAce
 AI - Confidential Technical Trial", and this plan restates its contents. The
 repository has an Apache 2.0 license, which suggests it may be published. Keep the
-repository private until AutoAce confirms otherwise. Add a `.gitignore` for audio,
-manifests, uploaded batches, and secrets before adding any data or code.
+repository private until AutoAce confirms otherwise. The `.gitignore` excludes audio,
+archives, PDFs, manifests, uploaded batches, model weights, and secrets.
 
-This document is a plan, not an implementation or a claim of measured performance.
+This document records the requirements and the plan that guided the build. It is not
+a claim of measured performance; measured results are in [reports/](reports).
 Items marked **Required** come from the brief. **Recommended** items are proposed
 implementation choices or improvements, not additional assessment obligations.
+For a shareable overview and walkthrough, see [docs/DELIVERABLES.md](docs/DELIVERABLES.md).
 
 ### Implementation Status (2026-10-27)
 
@@ -177,14 +179,17 @@ Additional required content, drawn from other sections of the brief:
 - [ ] Walkthrough script is in README; live hosted demo and private fallback recording
       remain pending deployment and approved recording/storage arrangements.
 
-Recommended repository layout for the deliverables, so they are easy to find:
-`docs/memo.md`, `reports/validation.md`, `reports/cost.md`, `reports/latency.md`,
-`predictions/supplied_calls.csv`, and setup/deploy/run instructions in `README.md`.
+Where the deliverables live: [docs/DELIVERABLES.md](docs/DELIVERABLES.md) (overview and
+walkthrough), [docs/TECHNICAL_MEMO.md](docs/TECHNICAL_MEMO.md),
+[reports/validation.md](reports/validation.md), [reports/cost_latency.md](reports/cost_latency.md),
+[predictions/supplied_calls.csv](predictions/supplied_calls.csv), and setup/deploy/run
+instructions in [README.md](README.md).
 
 ## 6. Proposed Architecture (Recommended)
 
 Start with one deployable application and a bounded background worker rather than
-multiple independent services. Hosting provider and model choice remain undecided.
+multiple independent services. The hosting provider is still undecided; the default
+analysis configuration is the acoustic baseline (E0).
 
 1. Authenticated dashboard accepts the batch and presents validation feedback.
 2. Isolated temporary storage holds uploaded audio and the parsed manifest.
@@ -202,10 +207,9 @@ multiple independent services. Hosting provider and model choice remain undecide
 8. Retention cleanup removes raw audio, temporary files, and results according to
    the agreed policy; logs exclude audio, credentials, and sensitive content.
 
-Candidate rapid-delivery stack: Python audio/model libraries with Streamlit for a
-small dashboard, or FastAPI plus a small frontend if job control/authentication
-needs justify the extra work. Verify secure login and hosting support before
-committing. Do not build an elaborate UI ahead of the working evaluation path.
+Chosen stack: FastAPI with a small plain-JavaScript frontend. Streamlit was considered,
+but background jobs, login rate limiting, and CSRF protection were simpler to control in
+FastAPI. The UI was kept to the evaluation workflow.
 
 Customer identification is a critical design decision: inspect channel roles and
 speaker structure first. Use channel separation when reliable, or evaluate
@@ -330,41 +334,46 @@ threaten mandatory deliverables.
 
 ## 10. Verification Checklist
 
-- [ ] Every successful result passes the exact nine-field schema and invariants.
+Checked items are covered by the automated tests in [tests/](tests) or by the recorded
+runs in [reports/](reports). Unchecked items need a deployment, more data, or a new test.
+
+- [x] Every successful result passes the exact nine-field schema and invariants.
 - [ ] Supplied OGG/Opus files decode; WAV, MP3, OGG/Vorbis, mono, and other sample
-      rates each have a fixture, plus one batch that mixes formats.
-- [ ] Uploading the original supplied ZIP unchanged (with its outer folder) works.
-- [ ] ZIPs containing `__MACOSX/` or `.DS_Store` entries, a CSV with BOM/CRLF, and
+      rates each have a fixture, plus one batch that mixes formats. (Single-format
+      fixtures exist; a mixed-format batch test is still missing.)
+- [x] Uploading the original supplied ZIP unchanged (with its outer folder) works.
+- [x] ZIPs containing `__MACOSX/` or `.DS_Store` entries, a CSV with BOM/CRLF, and
       filenames with spaces process correctly.
-- [ ] Valid labeled, empty-label, and name-only manifests work without label leakage.
-- [ ] Missing files, unmatched names, duplicates, malformed JSON/CSV, unsupported
+- [x] Valid labeled, empty-label, and name-only manifests work without label leakage.
+- [x] Missing files, unmatched names, duplicates, malformed JSON/CSV, unsupported
       audio, corrupt audio, and all-invalid batches produce clear outcomes.
-- [ ] One corrupt file does not prevent valid files from completing.
+- [x] One corrupt file does not prevent valid files from completing.
 - [ ] ZIP traversal, oversized expansion, excessive duration/file counts, and
       unauthorized access are rejected safely; upload content is never executed.
-- [ ] Predictions are unchanged when labels are altered or removed for the same
+      (Traversal and unauthorized access are tested; size and count limits are
+      implemented but not yet tested.)
+- [x] Predictions are unchanged when labels are altered or removed for the same
       audio. Scoring is a separate operation and never influences inference.
 - [ ] Customer/agent attribution and unresolved-role behavior are tested.
-- [ ] Loud neutral speech, poor-quality clean audio, meaningful background noise,
-      overlapping speech, and long silence have targeted checks where approved
-      examples exist; record untested cases rather than fabricate coverage.
+- [x] Loud neutral speech, poor-quality clean audio, meaningful background noise,
+      overlapping speech, and long silence have targeted synthetic checks.
 - [ ] Whole-call processing/chunk aggregation does not silently omit late events;
       chunk boundaries and silence durations are handled consistently.
 - [ ] Download/re-import preserves exact filenames, fields, and JSON types.
-- [ ] Logged-out users cannot access batches/results; users cannot read other
+- [x] Logged-out users cannot access batches/results; users cannot read other
       batches unless explicitly authorized; credentials are not committed.
 - [ ] Hosted browser workflow works on desktop and a narrow/mobile viewport,
       including progress, long filenames, failures, and downloads.
 - [ ] Clean-environment run follows documentation and reproduces stored predictions
       within declared model nondeterminism.
 - [ ] Measured/estimated cost and runtime include all enabled pipeline stages;
-      $0.003/audio-minute compliance is supported, not assumed.
+      $0.003/audio-minute compliance is supported, not assumed. (Measured locally;
+      the deployment host price and utilization are unknown.)
 - [ ] A large batch completes without request timeouts; the first request after
       idle does not fail because of cold start or model download.
-- [ ] When labels are present, the dashboard can show expected versus predicted per
+- [x] When labels are present, the dashboard can show expected versus predicted per
       file, and inference output is identical with labels removed.
-- [ ] Repository contains no confidential audio, labels, brief, or credentials, and
-      its visibility matches the confidentiality decision in section 1.
+- [x] Repository contains no confidential audio, labels, brief, or credentials.
 - [ ] Deployment URL/login work and evaluation-period availability has an owner.
 
 ## 11. Prioritized Improvement Backlog (Optional)

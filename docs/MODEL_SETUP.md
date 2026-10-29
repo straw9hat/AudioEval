@@ -4,8 +4,8 @@ Status: **pinned E1-E4/E6 models downloaded, loaded, and run locally.** The mode
 directories are git-ignored; a fresh machine must download them again. The service
 continues to use the acoustic baseline unless model paths are configured.
 
-This file is written so a person or coding agent can follow it step by step later.
-Work through the checklist at the end in order and record results in
+This guide is written to be followed step by step. Work through the checklist at the
+end in order and record results in
 [reports/validation.md](../reports/validation.md) and [reports/cost_latency.md](../reports/cost_latency.md).
 
 ## 1. Why models are needed

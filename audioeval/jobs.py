@@ -9,14 +9,16 @@ import secrets
 import shutil
 import threading
 import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO, Callable, Iterable
+from typing import BinaryIO
 
 from .audio import AudioDecodeError
 from .batch import BatchError, plan_batch, stage_upload
 from .config import Settings
+from .export import summarize
 from .pipeline import Analyzer
 from .scoring import score
 
@@ -25,7 +27,7 @@ JOB_ID_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 class JobManager:
@@ -48,6 +50,11 @@ class JobManager:
             if self._analyzer is None:
                 self._analyzer = self._analyzer_factory()
             return self._analyzer
+
+    @property
+    def method_if_loaded(self) -> str | None:
+        """Analyzer method name without triggering model loading."""
+        return self._analyzer.method if self._analyzer else None
 
     # ---- persistence -------------------------------------------------
     def _job_dir(self, job_id: str) -> Path:
@@ -94,14 +101,30 @@ class JobManager:
         job_id = secrets.token_urlsafe(12)
         job_dir = self._job_dir(job_id)
         job_dir.mkdir(parents=True)
-        job = {"id": job_id, "owner": owner, "created": _now(), "status": "validating", "errors": [],
-               "warnings": [], "skipped": [], "items": [], "manifest": None, "has_labels": False}
+        job = {
+            "id": job_id,
+            "owner": owner,
+            "created": _now(),
+            "status": "validating",
+            "errors": [],
+            "warnings": [],
+            "skipped": [],
+            "items": [],
+            "manifest": None,
+            "has_labels": False,
+        }
         try:
-            root, skipped, errors = stage_upload(uploads, job_dir, self.settings.max_upload_mb * 1024 * 1024, self.settings.max_files)
+            max_bytes = self.settings.max_upload_mb * 1024 * 1024
+            root, skipped, errors = stage_upload(uploads, job_dir, max_bytes, self.settings.max_files)
             plan = plan_batch(root)
-            job.update(errors=errors + plan.errors, warnings=plan.warnings, skipped=skipped + plan.skipped,
-                       manifest=plan.manifest_name, has_labels=plan.has_labels,
-                       items=[vars(it) | {"prediction": None, "details": None} for it in plan.items])
+            job.update(
+                errors=errors + plan.errors,
+                warnings=plan.warnings,
+                skipped=skipped,
+                manifest=plan.manifest_name,
+                has_labels=plan.has_labels,
+                items=[vars(it) | {"prediction": None, "details": None} for it in plan.items],
+            )
         except BatchError as exc:
             job["errors"].append(str(exc))
         job["status"] = "invalid" if job["errors"] and not any(i["status"] == "queued" for i in job["items"]) else "running"
@@ -167,8 +190,7 @@ class JobManager:
             failed = any(i["status"] == "failed" for i in job["items"])
             job["status"] = "completed_with_errors" if failed or job["errors"] else "completed"
             job["finished"] = _now()
-            pairs = [(i["name"], i["prediction"], i["label"]) for i in job["items"]
-                     if i["status"] == "done" and i.get("label")]
+            pairs = [(i["name"], i["prediction"], i["label"]) for i in job["items"] if i["status"] == "done" and i.get("label")]
             job["score"] = score(pairs) if pairs else None
             job["method"] = self.analyzer.method
             self._summarize(job)
@@ -182,16 +204,7 @@ class JobManager:
 
     @staticmethod
     def _summarize(job: dict) -> None:
-        counts = {s: 0 for s in ("queued", "running", "done", "failed")}
-        audio_s = proc_s = 0.0
-        for it in job["items"]:
-            counts[it["status"]] = counts.get(it["status"], 0) + 1
-            if it.get("details"):
-                audio_s += it["details"]["audio"]["duration_s"]
-                proc_s += it["details"]["timings"]["total_s"]
-        job["summary"] = counts | {"total": len(job["items"]), "audio_minutes": round(audio_s / 60, 3),
-                                   "processing_s": round(proc_s, 3),
-                                   "real_time_factor": round(proc_s / audio_s, 4) if audio_s else None}
+        job["summary"] = summarize(job["items"])
 
     # ---- queries -----------------------------------------------------
     def get(self, job_id: str, owner: str) -> dict:
@@ -201,7 +214,7 @@ class JobManager:
                 raise KeyError(job_id)
             return job
 
-    def list(self, owner: str) -> list[dict]:
+    def list_jobs(self, owner: str) -> list[dict]:
         with self._lock:
             jobs = [j for j in self.jobs.values() if j["owner"] == owner]
         return sorted(jobs, key=lambda j: j["created"], reverse=True)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
 from .labels import NOISE_LABELS
@@ -19,7 +21,7 @@ class AudioEventModel:
         self.labels = [self.model.config.id2label[i] for i in range(self.model.config.num_labels)]
         self.noise_idx = {i: NOISE_LABELS[lbl] for i, lbl in enumerate(self.labels) if lbl in NOISE_LABELS}
         self.sr = getattr(self.extractor, "sampling_rate", 16000)
-        self.name = path.replace("\\", "/").rstrip("/").split("/")[-1]
+        self.name = Path(path).name
         if not self.noise_idx:
             raise ValueError("model has no AudioSet labels that map to noise types")
 
@@ -29,7 +31,7 @@ class AudioEventModel:
             raise ValueError(f"event model expects {self.sr} Hz audio")
         results = []
         for start in range(0, len(windows), 8):
-            batch = windows[start:start + 8]
+            batch = windows[start : start + 8]
             inputs = self.extractor(batch, sampling_rate=sr, return_tensors="pt")
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
             with self.torch.inference_mode():

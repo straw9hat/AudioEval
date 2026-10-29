@@ -20,13 +20,15 @@ def by_name(plan):
 
 
 def test_wrapped_zip_with_os_artifacts(tmp_path, wav):
-    z = make_zip({
-        "Voice Analyzer Assessment/a.wav": wav,
-        "Voice Analyzer Assessment/b.wav": wav,
-        "Voice Analyzer Assessment/labels.csv": manifest([("a.wav", LABEL), ("b.wav", None)], bom=True, crlf=True),
-        "__MACOSX/Voice Analyzer Assessment/._a.wav": b"junk",
-        "Voice Analyzer Assessment/.DS_Store": b"junk",
-    })
+    z = make_zip(
+        {
+            "Voice Analyzer Assessment/a.wav": wav,
+            "Voice Analyzer Assessment/b.wav": wav,
+            "Voice Analyzer Assessment/labels.csv": manifest([("a.wav", LABEL), ("b.wav", None)], bom=True, crlf=True),
+            "__MACOSX/Voice Analyzer Assessment/._a.wav": b"junk",
+            "Voice Analyzer Assessment/.DS_Store": b"junk",
+        }
+    )
     root, skipped, errors = stage(tmp_path, [("batch.zip", z)])
     plan = plan_batch(root)
     assert not errors and not plan.errors

@@ -7,9 +7,10 @@ import io
 import shutil
 import stat
 import zipfile
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import BinaryIO, Iterable
+from typing import BinaryIO
 
 from .audio import supported_extensions
 from .schema import SchemaError, parse_label
@@ -39,7 +40,6 @@ class BatchPlan:
     items: list[Item] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)  # batch-level, processing cannot start
     warnings: list[str] = field(default_factory=list)
-    skipped: list[str] = field(default_factory=list)
     manifest_name: str | None = None
     has_labels: bool = False
 
@@ -108,7 +108,7 @@ def extract_zip(src: BinaryIO, dest: Path, budget: list[int], max_files: int) ->
     return skipped
 
 
-def _unwrap(source: Path) -> Path:
+def unwrap_single_folder(source: Path) -> Path:
     """Descend into a single wrapper folder (e.g. 'Voice Analyzer Assessment/')."""
     entries = [p for p in source.iterdir()]
     if len(entries) == 1 and entries[0].is_dir():
@@ -116,7 +116,9 @@ def _unwrap(source: Path) -> Path:
     return source
 
 
-def stage_upload(uploads: Iterable[tuple[str, BinaryIO]], staging: Path, max_bytes: int, max_files: int) -> tuple[Path, list[str], list[str]]:
+def stage_upload(
+    uploads: Iterable[tuple[str, BinaryIO]], staging: Path, max_bytes: int, max_files: int
+) -> tuple[Path, list[str], list[str]]:
     """Write uploaded files/ZIPs to disk and merge their root level into one batch folder.
 
     Returns (batch_root, skipped, errors).
@@ -155,7 +157,7 @@ def stage_upload(uploads: Iterable[tuple[str, BinaryIO]], staging: Path, max_byt
     if loose.exists():
         sources.insert(0, loose)
     for source in sources:
-        base = _unwrap(source)
+        base = unwrap_single_folder(source)
         for p in sorted(base.rglob("*")):
             if not p.is_file():
                 continue

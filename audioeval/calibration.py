@@ -43,7 +43,7 @@ class Calibrator:
         self.params = params
 
     @classmethod
-    def load(cls, path: str) -> "Calibrator":
+    def load(cls, path: str) -> Calibrator:
         if not path:
             return cls(None)
         return cls(json.loads(Path(path).read_text(encoding="utf-8")))

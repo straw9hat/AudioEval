@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -22,7 +23,7 @@ class WhisperASR:
 
         compute_type = "int8" if device == "cpu" else "float16"
         self.model = WhisperModel(path, device=device, compute_type=compute_type, local_files_only=True)
-        self.name = path.replace("\\", "/").rstrip("/").split("/")[-1]
+        self.name = Path(path).name
 
     def transcribe(self, audio: np.ndarray, sr: int) -> tuple[list[Segment], str]:
         if sr != 16000:
@@ -35,9 +36,10 @@ class TextEmotionModel:
     def __init__(self, path: str, device: str = "cpu"):
         from transformers import pipeline
 
-        self.pipe = pipeline("text-classification", model=path, tokenizer=path, top_k=None,
-                             device=-1 if device == "cpu" else 0, truncation=True)
-        self.name = path.replace("\\", "/").rstrip("/").split("/")[-1]
+        self.pipe = pipeline(
+            "text-classification", model=path, tokenizer=path, top_k=None, device=-1 if device == "cpu" else 0, truncation=True
+        )
+        self.name = Path(path).name
         labels = [lbl.lower() for lbl in self.pipe.model.config.id2label.values()]
         if not any(lbl in TEXT_LABELS for lbl in labels):
             raise ValueError(f"text model labels {labels} have no mapping in TEXT_LABELS")

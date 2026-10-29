@@ -52,19 +52,29 @@ def score(pairs: list[tuple[str, dict, dict]]) -> dict:
     """pairs: (name, prediction, label). Only fields present in a label are scored."""
     report: dict = {"n_scored": len(pairs), "fields": {}}
     for field, classes in CATEGORICAL.items():
-        rows = [(p[field], l[field]) for _, p, l in pairs if field in l]
+        rows = [(pred[field], label[field]) for _, pred, label in pairs if field in label]
         if rows:
-            report["fields"][field] = field_metrics([l for _, l in rows], [p for p, _ in rows], classes)
-    rows = [(p["background_noise_type"], l["background_noise_type"]) for _, p, l in pairs if "background_noise_type" in l]
+            report["fields"][field] = field_metrics([t for _, t in rows], [p for p, _ in rows], classes)
+    noise = "background_noise_type"
+    rows = [(pred[noise], label[noise]) for _, pred, label in pairs if noise in label]
     if rows:
-        exact = sum(p.strip().lower() == l.strip().lower() for p, l in rows)
-        norm = sum(normalize_noise_type(p) == normalize_noise_type(l) for p, l in rows)
-        report["fields"]["background_noise_type"] = {
-            "n": len(rows), "exact_match": exact / len(rows), "normalized_match": norm / len(rows),
+        exact = sum(p.strip().lower() == t.strip().lower() for p, t in rows)
+        norm = sum(normalize_noise_type(p) == normalize_noise_type(t) for p, t in rows)
+        report["fields"][noise] = {
+            "n": len(rows),
+            "exact_match": exact / len(rows),
+            "normalized_match": norm / len(rows),
             "note": "normalized_match uses the synonym table in models/labels.py; human review recommended",
         }
     report["per_file"] = [
-        {"name": n, "mismatches": {f: {"expected": l[f], "predicted": p.get(f)} for f in l if f != "confidence" and p.get(f) != l[f]}}
-        for n, p, l in pairs
+        {
+            "name": name,
+            "mismatches": {
+                f: {"expected": label[f], "predicted": pred.get(f)}
+                for f in label
+                if f != "confidence" and pred.get(f) != label[f]
+            },
+        }
+        for name, pred, label in pairs
     ]
     return report

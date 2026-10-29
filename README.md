@@ -9,6 +9,7 @@ download the results as CSV or JSON.
 
 | Document | Contents |
 | --- | --- |
+| [docs/DELIVERABLES.md](docs/DELIVERABLES.md) | **Start here.** Shareable overview, user walkthrough, deliverable status |
 | [PLAN.md](PLAN.md) | Requirements, acceptance criteria, delivery plan |
 | [docs/TECHNICAL_MEMO.md](docs/TECHNICAL_MEMO.md) | Approaches, architecture, ambiguity handling, limitations, production path |
 | [docs/MODEL_SETUP.md](docs/MODEL_SETUP.md) | Pinned local model setup and experiment commands |
@@ -44,6 +45,8 @@ severity `none|low|medium|high`; quality `clear|slightly_impaired|severely_impai
 py -3.14 -m venv .venv            # Python 3.11+ should work; 3.14.2 was tested
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .   # lint
+.\.venv\Scripts\python.exe -m ruff format --check .   # formatting
 ```
 
 On Linux/macOS use `python3 -m venv .venv` and `.venv/bin/python`.
@@ -105,22 +108,13 @@ a separate file-results table with per-file status, duration, and estimated infe
 Cost estimates use editable hourly-price and utilization assumptions for measured processing
 time only; they are not Azure bills and exclude idle hosting and other platform charges.
 
-### Short review walkthrough
+### Review walkthrough
 
-1. Sign in with the dedicated evaluator account; do not show or record the password.
-2. Upload an approved batch containing audio files and its CSV manifest.
-3. Show validation, per-file progress, and the difference between successful predictions
-   and file errors.
-4. Open a result and point out the nine-field schema, evidence, and confidence caveat.
-   Label comparisons are scoring output; labels are not inference input.
-5. Download the predictions CSV and errors report. Explain that model comparisons on the
-   three supplied calls are descriptive only and that the acoustic baseline remains default.
-6. If the hosted app is unavailable, use the local CLI command and the saved
-   [validation report](reports/validation.md) and [baseline export](predictions/supplied_calls.csv).
+A step-by-step walkthrough of the dashboard, a CLI fallback, and troubleshooting tips are
+in [docs/DELIVERABLES.md](docs/DELIVERABLES.md#user-walkthrough).
 
 Do not record supplied confidential calls, credentials, or evaluator data unless the
-recipient, storage, and retention are approved. A dashboard fallback recording still
-needs to be made after an approved deployment, preferably with approved synthetic audio.
+recipient, storage, and retention are approved.
 
 ## Deployment
 

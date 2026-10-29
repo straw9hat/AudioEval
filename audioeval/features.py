@@ -1,7 +1,7 @@
 """Deterministic frame-level and call-level acoustic features.
 
-All thresholds are fixed defaults chosen from general telephony/acoustics practice,
-not fitted to the three supplied calls. They are configurable in `config.py`.
+Constants here describe framing and signal-processing limits. Decision thresholds
+live in `config.py`.
 """
 
 from __future__ import annotations
@@ -46,9 +46,9 @@ def frame_features(x: np.ndarray, sr: int) -> FrameFeatures:
     band = (freqs >= 300) & (freqs <= 4000)
     out = {k: [] for k in FrameFeatures.__dataclass_fields__}
     for start in range(0, len(frames_all), BLOCK):
-        fr = frames_all[start:start + BLOCK].astype(np.float32)
+        fr = frames_all[start : start + BLOCK].astype(np.float32)
         fr = fr - fr.mean(axis=1, keepdims=True)
-        out["energy_db"].append(10 * np.log10(np.mean(fr ** 2, axis=1) + 1e-10))
+        out["energy_db"].append(10 * np.log10(np.mean(fr**2, axis=1) + 1e-10))
         spec = np.abs(np.fft.rfft(fr * window, n=N_FFT, axis=1)) ** 2 + 1e-12
         sb = spec[:, band]
         out["flatness"].append(np.exp(np.mean(np.log(sb), axis=1)) / np.mean(sb, axis=1))
@@ -76,7 +76,7 @@ def frame_features(x: np.ndarray, sr: int) -> FrameFeatures:
     return FrameFeatures(**{k: np.concatenate(v).astype(np.float32) for k, v in out.items()})
 
 
-def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
+def mask_runs(mask: np.ndarray) -> list[tuple[int, int]]:
     """Return [start, end) index pairs of True runs."""
     if mask.size == 0:
         return []
@@ -101,12 +101,12 @@ def speech_mask(ff: FrameFeatures) -> tuple[np.ndarray, float]:
     # Keep loud frames within 300 ms of voiced frames (consonants, word edges).
     mask = loud & _dilate(voiced, 30)
     # Bridge short pauses (< 250 ms) inside speech.
-    gaps = _runs(~mask)
+    gaps = mask_runs(~mask)
     for s, e in gaps:
-        if 0 < s and e < len(mask) and e - s < 25:
+        if s > 0 and e < len(mask) and e - s < 25:
             mask[s:e] = True
     # Drop isolated blips shorter than 100 ms.
-    for s, e in _runs(mask):
+    for s, e in mask_runs(mask):
         if e - s < 10:
             mask[s:e] = False
     return mask, floor
@@ -179,7 +179,7 @@ def call_features(audio: Audio) -> tuple[CallFeatures, FrameFeatures, np.ndarray
     bg_transient_rate = float(transients.sum() / bg_minutes) if bg.sum() > fps * 5 else 0.0
 
     silent = ~mask
-    silent_runs = _runs(silent)
+    silent_runs = mask_runs(silent)
     longest = max(((e - s) / fps for s, e in silent_runs), default=0.0)
     internal = max(((e - s) / fps for s, e in silent_runs if s > 0 and e < len(mask)), default=0.0)
 
@@ -199,7 +199,7 @@ def call_features(audio: Audio) -> tuple[CallFeatures, FrameFeatures, np.ndarray
     digital = ff.energy_db <= DIGITAL_SILENCE_DB
     dropouts = 0
     abrupt = speech_level - 10.0
-    for s, e in _runs(digital):
+    for s, e in mask_runs(digital):
         # Packet loss cuts speech off abruptly; natural pauses and DTX decay first.
         if 2 <= e - s <= 20 and s > 0 and e < len(mask) and ff.energy_db[s - 1] >= abrupt and ff.energy_db[e] >= abrupt:
             dropouts += 1

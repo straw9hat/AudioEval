@@ -13,9 +13,15 @@ import soundfile as sf
 
 SR = 16000
 LABEL = {
-    "emotional_tone": "neutral", "emotional_intensity": "medium", "background_noise_present": False,
-    "background_noise_type": "", "background_noise_severity": "none", "audio_quality": "clear",
-    "speaker_overlap_present": False, "long_silence_present": False, "confidence": 0.8,
+    "emotional_tone": "neutral",
+    "emotional_intensity": "medium",
+    "background_noise_present": False,
+    "background_noise_type": "",
+    "background_noise_severity": "none",
+    "audio_quality": "clear",
+    "speaker_overlap_present": False,
+    "long_silence_present": False,
+    "confidence": 0.8,
 }
 
 

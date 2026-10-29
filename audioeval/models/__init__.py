@@ -55,22 +55,27 @@ def load_models(settings: Settings) -> ModelBundle:
 
     def emotion(path):
         from .emotion_audio import AudioEmotionModel
+
         return AudioEmotionModel(path, settings.device)
 
     def events(path):
         from .audio_events import AudioEventModel
+
         return AudioEventModel(path, settings.device)
 
     def asr(path):
         from .asr_text import WhisperASR
+
         return WhisperASR(path, settings.device)
 
     def text(path):
         from .asr_text import TextEmotionModel
+
         return TextEmotionModel(path, settings.device)
 
     def overlap(path):
         from .overlap import OverlapModel
+
         return OverlapModel(path, settings.device)
 
     _try(bundle, "emotion", settings.emotion_model, emotion)

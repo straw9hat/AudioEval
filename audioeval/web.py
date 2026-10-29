@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,11 +25,29 @@ from .pipeline import Analyzer
 log = logging.getLogger("audioeval.web")
 STATIC = Path(__file__).parent / "static"
 SESSION_MAX_AGE = 8 * 3600
-CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-       "connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'")
+CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+    "connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
+)
+JOB_FIELDS = (
+    "id",
+    "created",
+    "finished",
+    "status",
+    "errors",
+    "warnings",
+    "skipped",
+    "manifest",
+    "has_labels",
+    "summary",
+    "score",
+    "method",
+)
+JOB_LIST_FIELDS = ("id", "created", "status", "summary", "manifest", "has_labels")
+ITEM_FIELDS = ("name", "status", "error", "warnings", "in_manifest", "prediction", "label")
 
 
-def create_app(settings: Settings | None = None, analyzer_factory=None) -> FastAPI:
+def create_app(settings: Settings | None = None, analyzer_factory: Callable[[], Analyzer] | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     users = load_users()
     if not users:
@@ -49,8 +68,14 @@ def create_app(settings: Settings | None = None, analyzer_factory=None) -> FastA
 
     app = FastAPI(title="AudioEval", version=__version__, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.jobs = jobs
-    app.add_middleware(SessionMiddleware, secret_key=secret, session_cookie="audioeval_session",
-                       max_age=SESSION_MAX_AGE, same_site="strict", https_only=secure_cookie)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=secret,
+        session_cookie="audioeval_session",
+        max_age=SESSION_MAX_AGE,
+        same_site="strict",
+        https_only=secure_cookie,
+    )
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -145,11 +170,17 @@ def create_app(settings: Settings | None = None, analyzer_factory=None) -> FastA
     @app.get("/api/me")
     async def me(request: Request):
         user = current_user(request)
-        analyzer = jobs._analyzer
-        return {"user": user, "csrf": request.session["csrf"], "version": __version__,
-                "method": analyzer.method if analyzer else None,
-                "limits": {"max_upload_mb": settings.max_upload_mb, "max_files": settings.max_files,
-                           "retention_hours": settings.retention_hours}}
+        return {
+            "user": user,
+            "csrf": request.session["csrf"],
+            "version": __version__,
+            "method": jobs.method_if_loaded,
+            "limits": {
+                "max_upload_mb": settings.max_upload_mb,
+                "max_files": settings.max_files,
+                "retention_hours": settings.retention_hours,
+            },
+        }
 
     # ---- jobs -------------------------------------------------------------
     @app.post("/api/jobs")
@@ -179,7 +210,7 @@ def create_app(settings: Settings | None = None, analyzer_factory=None) -> FastA
     @app.get("/api/jobs")
     async def list_jobs(request: Request):
         user = current_user(request)
-        return [{k: j.get(k) for k in ("id", "created", "status", "summary", "manifest", "has_labels")} for j in jobs.list(user)]
+        return [{k: j.get(k) for k in JOB_LIST_FIELDS} for j in jobs.list_jobs(user)]
 
     @app.get("/api/jobs/{job_id}")
     async def get_job(request: Request, job_id: str):
@@ -210,10 +241,16 @@ def _attachment(job_id: str, kind: str) -> dict:
 
 
 def job_view(job: dict) -> dict:
-    items = [{k: it.get(k) for k in ("name", "status", "error", "warnings", "in_manifest", "prediction", "label")}
-             | {"field_confidence": (it.get("details") or {}).get("field_confidence"),
-                "duration_s": ((it.get("details") or {}).get("audio") or {}).get("duration_s"),
-                "processing_s": ((it.get("details") or {}).get("timings") or {}).get("total_s")}
-             for it in job["items"]]
-    return {k: job.get(k) for k in ("id", "created", "finished", "status", "errors", "warnings", "skipped",
-                                     "manifest", "has_labels", "summary", "score", "method")} | {"items": items}
+    """Client-facing job record: drops server paths and the bulky per-file details."""
+    items = []
+    for it in job["items"]:
+        details = it.get("details") or {}
+        items.append(
+            {k: it.get(k) for k in ITEM_FIELDS}
+            | {
+                "field_confidence": details.get("field_confidence"),
+                "duration_s": details.get("audio", {}).get("duration_s"),
+                "processing_s": details.get("timings", {}).get("total_s"),
+            }
+        )
+    return {k: job.get(k) for k in JOB_FIELDS} | {"items": items}

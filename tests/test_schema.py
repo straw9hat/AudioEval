@@ -10,10 +10,18 @@ def test_valid_prediction_roundtrip():
     assert validate_prediction(dict(LABEL)) == LABEL
 
 
-@pytest.mark.parametrize("field,value", [
-    ("emotional_tone", "angry"), ("emotional_intensity", "extreme"), ("audio_quality", "ok"),
-    ("background_noise_present", "false"), ("confidence", 1.2), ("confidence", True), ("background_noise_type", None),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("emotional_tone", "angry"),
+        ("emotional_intensity", "extreme"),
+        ("audio_quality", "ok"),
+        ("background_noise_present", "false"),
+        ("confidence", 1.2),
+        ("confidence", True),
+        ("background_noise_type", None),
+    ],
+)
 def test_invalid_values_rejected(field, value):
     pred = dict(LABEL)
     pred[field] = value

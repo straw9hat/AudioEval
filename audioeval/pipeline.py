@@ -12,9 +12,17 @@ from . import __version__
 from .audio import Audio, load_audio
 from .calibration import Calibrator
 from .config import Settings
-from .features import HOP, _runs, call_features
+from .features import HOP, call_features, frame_features, mask_runs, speech_mask
 from .models import ModelBundle, load_models
-from .rules import aggregate_tone, decide_noise, decide_overlap, decide_quality, decide_silence, decide_tone, overall_confidence
+from .rules import (
+    aggregate_tone,
+    decide_noise,
+    decide_overlap,
+    decide_quality,
+    decide_silence,
+    decide_tone,
+    overall_confidence,
+)
 from .schema import validate_prediction
 
 
@@ -24,10 +32,12 @@ class AnalysisResult:
     details: dict
 
 
-def speech_windows(x: np.ndarray, sr: int, mask: np.ndarray, min_s=2.0, max_s=8.0) -> tuple[list[np.ndarray], list[float]]:
+def speech_windows(
+    x: np.ndarray, sr: int, mask: np.ndarray, min_s: float = 2.0, max_s: float = 8.0
+) -> tuple[list[np.ndarray], list[float]]:
     """Cut VAD speech regions into windows of 2-8 s for window-level models."""
     windows, weights = [], []
-    for s, e in _runs(mask):
+    for s, e in mask_runs(mask):
         a, b = s * HOP, min(len(x), e * HOP)
         while b - a >= int(min_s * sr) // 2:
             end = min(b, a + int(max_s * sr))
@@ -40,9 +50,9 @@ def speech_windows(x: np.ndarray, sr: int, mask: np.ndarray, min_s=2.0, max_s=8.
     return windows, weights
 
 
-def fixed_windows(x: np.ndarray, sr: int, size_s=10.0) -> list[np.ndarray]:
+def fixed_windows(x: np.ndarray, sr: int, size_s: float = 10.0) -> list[np.ndarray]:
     n = int(size_s * sr)
-    return [x[i:i + n] for i in range(0, max(len(x) - n // 4, 1), n)]
+    return [x[i : i + n] for i in range(0, max(len(x) - n // 4, 1), n)]
 
 
 class Analyzer:
@@ -57,8 +67,7 @@ class Analyzer:
         return "acoustic_baseline" + (f"+{'+'.join(used)}" if used else "")
 
     def describe(self) -> dict:
-        return {"version": __version__, "method": self.method, "models": self.models.status,
-                "calibrated": self.calibrator.active}
+        return {"version": __version__, "method": self.method, "models": self.models.status, "calibrated": self.calibrator.active}
 
     def _customer_signal(self, audio: Audio) -> tuple[np.ndarray, str]:
         ch = self.settings.customer_channel
@@ -72,13 +81,12 @@ class Analyzer:
         s = self.settings
         audio = load_audio(path, max_duration_s=s.max_duration_s)
         t_decode = time.perf_counter()
-        cf, ff, mask = call_features(audio)
+        cf, _, mask = call_features(audio)
         t_feat = time.perf_counter()
         timings: dict[str, float] = {}
 
         customer, role = self._customer_signal(audio)
         if role.startswith("channel_"):
-            from .features import speech_mask, frame_features
             cust_mask, _ = speech_mask(frame_features(customer, audio.sr))
         else:
             cust_mask = mask
@@ -95,7 +103,7 @@ class Analyzer:
             timings["emotion_s"] = time.perf_counter() - t
         if self.models.asr is not None and self.models.text is not None:
             t = time.perf_counter()
-            segments, _lang = self.models.asr.transcribe(customer, audio.sr)
+            segments, _ = self.models.asr.transcribe(customer, audio.sr)
             texts = [seg.text for seg in segments]
             transcript_chars = sum(len(x) for x in texts)
             dists = [d for d in self.models.text.predict(texts) if d]
@@ -142,8 +150,12 @@ class Analyzer:
             "method": self.method,
             "version": __version__,
             "customer_audio": role,
-            "audio": {"duration_s": round(audio.duration_s, 2), "original_sr": audio.original_sr,
-                      "channels": audio.original_channels, "distinct_channels": audio.distinct_channels},
+            "audio": {
+                "duration_s": round(audio.duration_s, 2),
+                "original_sr": audio.original_sr,
+                "channels": audio.original_channels,
+                "distinct_channels": audio.distinct_channels,
+            },
             "field_confidence": {k: round(d.confidence, 3) for k, d in decisions.items()},
             "raw_confidence": round(raw_conf, 3),
             "calibrated": self.calibrator.active,

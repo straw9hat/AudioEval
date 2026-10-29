@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
 from .labels import SER_LABELS, map_distribution
@@ -18,7 +20,7 @@ class AudioEmotionModel:
         self.device = device
         self.labels = [self.model.config.id2label[i] for i in range(self.model.config.num_labels)]
         self.sr = getattr(self.extractor, "sampling_rate", 16000)
-        self.name = path.replace("\\", "/").rstrip("/").split("/")[-1]
+        self.name = Path(path).name
         if not any(lbl.strip().lower() in SER_LABELS for lbl in self.labels):
             raise ValueError(f"model labels {self.labels} have no mapping in SER_LABELS")
 
@@ -28,7 +30,7 @@ class AudioEmotionModel:
             raise ValueError(f"emotion model expects {self.sr} Hz audio")
         results = []
         for start in range(0, len(windows), 8):
-            batch = windows[start:start + 8]
+            batch = windows[start : start + 8]
             inputs = self.extractor(batch, sampling_rate=sr, return_tensors="pt", padding=True)
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
             with self.torch.inference_mode():

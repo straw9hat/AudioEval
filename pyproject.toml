@@ -8,3 +8,16 @@ license = { file = "LICENSE" }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "tests"]
+# Third-party notice from Starlette's TestClient; not actionable in this project.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["B905"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["audioeval", "conftest"]

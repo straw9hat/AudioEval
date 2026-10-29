@@ -91,13 +91,17 @@ function upload() {
 function fmt(value) {
   if (value === true) return "yes";
   if (value === false) return "no";
-  if (value === "" ) return "-";
+  if (value === "") return "-";
   return value;
 }
 
+function fieldMismatch(item, field) {
+  return Boolean(item.label && item.prediction && field !== "confidence" && field in item.label &&
+    item.label[field] !== item.prediction[field]);
+}
+
 function mismatch(item) {
-  if (!item.label || !item.prediction) return false;
-  return FIELDS.some((f) => f !== "confidence" && f in item.label && item.label[f] !== item.prediction[f]);
+  return FIELDS.some((f) => fieldMismatch(item, f));
 }
 
 function costInputs() {
@@ -238,7 +242,7 @@ function renderItems(job) {
       const td = el("td");
       if (item.prediction) {
         td.append(el("div", fmt(item.prediction[f])));
-        if (item.label && f in item.label && f !== "confidence" && item.label[f] !== item.prediction[f]) {
+        if (fieldMismatch(item, f)) {
           td.classList.add("mismatch");
           td.append(el("div", `expected: ${fmt(item.label[f])}`, "small"));
         }

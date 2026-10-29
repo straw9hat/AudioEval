@@ -6,10 +6,10 @@ from audioeval.audio import AudioDecodeError, load_audio
 from audioeval.calibration import Calibrator, fit_isotonic
 from audioeval.config import Settings
 from audioeval.cost import cost_per_audio_minute
+from audioeval.features import CallFeatures
 from audioeval.models import ModelBundle
 from audioeval.pipeline import Analyzer
 from audioeval.rules import aggregate_tone, decide_tone
-from audioeval.features import CallFeatures
 from audioeval.scoring import score
 from conftest import LABEL, SR, speech_like, write
 
@@ -28,6 +28,10 @@ def test_speech_prediction_is_schema_valid(analyzer, speech_wav):
     assert res.details["method"] == "acoustic_baseline"
 
 
+def test_analysis_is_deterministic(analyzer, speech_wav):
+    assert analyzer.analyze(speech_wav).prediction == analyzer.analyze(speech_wav).prediction
+
+
 def test_long_silence_detected(analyzer, tmp_path):
     x = np.concatenate([speech_like(5), np.zeros(SR * 15, dtype=np.float32), speech_like(5, seed=1)])
     res = analyzer.analyze(write(tmp_path / "gap.wav", x))
@@ -42,7 +46,7 @@ def test_impulsive_background_noise_detected(analyzer, tmp_path):
         parts.append(speech_like(3, seed=i))
         gap = 1e-4 * rng.standard_normal(SR * 3).astype(np.float32)
         for pos in rng.integers(0, len(gap) - 80, 12):
-            gap[pos:pos + 40] += 0.3 * rng.standard_normal(40).astype(np.float32)
+            gap[pos : pos + 40] += 0.3 * rng.standard_normal(40).astype(np.float32)
         parts.append(gap)
     res = analyzer.analyze(write(tmp_path / "static.wav", np.concatenate(parts)))
     assert res.prediction["background_noise_present"] is True
@@ -76,7 +80,15 @@ def test_dual_mono_is_treated_as_single_channel(analyzer, tmp_path):
     assert res.details["audio"]["distinct_channels"] is False
 
 
-@pytest.mark.parametrize("ext,fmt,subtype", [(".ogg", "OGG", "VORBIS"), (".ogg", "OGG", "OPUS"), (".flac", "FLAC", None), (".mp3", "MP3", None)])
+@pytest.mark.parametrize(
+    "ext,fmt,subtype",
+    [
+        (".ogg", "OGG", "VORBIS"),
+        (".ogg", "OGG", "OPUS"),
+        (".flac", "FLAC", None),
+        (".mp3", "MP3", None),
+    ],
+)
 def test_other_formats_and_rates(analyzer, tmp_path, ext, fmt, subtype):
     sr = 48000 if subtype == "OPUS" else 44100
     x = np.interp(np.arange(int(8 * sr)) * SR / sr, np.arange(8 * SR), speech_like(8)).astype(np.float32)
@@ -100,11 +112,33 @@ def test_decode_errors(tmp_path):
 
 
 def _cf(**kw):
-    base = dict(duration_s=60, distinct_channels=False, speech_ratio=0.6, speech_level_db=-20, quiet_floor_db=-70,
-                background_level_db=-65, background_seconds=20, snr_db=45, bg_active_ratio=0, bg_voicing=0, bg_flatness=0.2,
-                bg_transient_rate=0, bg_stationarity_db=5, longest_silence_s=2, longest_internal_silence_s=2,
-                overlap_ratio=0, overlap_method="x", clip_fraction=0, dropout_rate=0, speech_rolloff_hz=900,
-                pitch_median_hz=180, pitch_std_semitones=4, energy_std_db=12, voiced_onset_rate=5, loud_speech_ratio=0.2)
+    base = dict(
+        duration_s=60,
+        distinct_channels=False,
+        speech_ratio=0.6,
+        speech_level_db=-20,
+        quiet_floor_db=-70,
+        background_level_db=-65,
+        background_seconds=20,
+        snr_db=45,
+        bg_active_ratio=0,
+        bg_voicing=0,
+        bg_flatness=0.2,
+        bg_transient_rate=0,
+        bg_stationarity_db=5,
+        longest_silence_s=2,
+        longest_internal_silence_s=2,
+        overlap_ratio=0,
+        overlap_method="x",
+        clip_fraction=0,
+        dropout_rate=0,
+        speech_rolloff_hz=900,
+        pitch_median_hz=180,
+        pitch_std_semitones=4,
+        energy_std_db=12,
+        voiced_onset_rate=5,
+        loud_speech_ratio=0.2,
+    )
     return CallFeatures(**(base | kw))
 
 
@@ -129,7 +163,7 @@ def test_tone_fusion_and_aggregation():
 def test_scoring_metrics():
     labels = [LABEL | {"emotional_tone": t} for t in ("upset", "neutral", "satisfied")]
     preds = [LABEL | {"emotional_tone": t} for t in ("upset", "neutral", "neutral")]
-    rep = score([(str(i), p, l) for i, (p, l) in enumerate(zip(preds, labels))])
+    rep = score([(str(i), pred, label) for i, (pred, label) in enumerate(zip(preds, labels))])
     tone = rep["fields"]["emotional_tone"]
     assert tone["accuracy"] == pytest.approx(2 / 3)
     assert tone["confusion_matrix"]["satisfied"]["neutral"] == 1
@@ -138,8 +172,8 @@ def test_scoring_metrics():
 
 
 def test_noise_type_synonyms():
-    rep = score([("a", LABEL | {"background_noise_present": True, "background_noise_type": "television", "background_noise_severity": "low"},
-                  LABEL | {"background_noise_present": True, "background_noise_type": "TV", "background_noise_severity": "low"})])
+    noisy = LABEL | {"background_noise_present": True, "background_noise_severity": "low"}
+    rep = score([("a", noisy | {"background_noise_type": "television"}, noisy | {"background_noise_type": "TV"})])
     assert rep["fields"]["background_noise_type"]["normalized_match"] == 1.0
 
 

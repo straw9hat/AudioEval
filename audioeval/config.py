@@ -22,7 +22,8 @@ def _env(name: str, default):
 
 @dataclass(frozen=True)
 class Settings:
-    # Decision thresholds (defaults are a-priori, not fitted to the supplied calls).
+    # Decision thresholds. Hand-set starting points, not fitted; they were chosen with the
+    # supplied calls in view, so agreement on those calls is not independent validation.
     long_silence_s: float = 10.0
     overlap_ratio_single: float = 0.10
     overlap_ratio_two_channel: float = 0.05
@@ -60,7 +61,7 @@ class Settings:
     data_dir: str = "jobs"
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         return cls(**{f.name: _env(f.name, f.default) for f in fields(cls)})
 
     @property

@@ -50,11 +50,27 @@ def _resample(x: np.ndarray, sr: int, target: int) -> np.ndarray:
     return resample_poly(x, target // g, sr // g, axis=0)
 
 
-def _decode_ffmpeg(path: Path) -> tuple[np.ndarray, int]:
+def _decode_ffmpeg(path: Path, max_duration_s: float) -> tuple[np.ndarray, int]:
     if not ffmpeg_available():
         raise AudioDecodeError("format not supported without ffmpeg")
-    cmd = ["ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-ac", "1",
-           "-ar", str(ANALYSIS_SR), "-f", "f32le", "-"]
+    # Decode one second past the limit so over-long files are detected without reading them fully.
+    cmd = [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-i",
+        str(path),
+        "-t",
+        str(max_duration_s + 1),
+        "-ac",
+        "1",
+        "-ar",
+        str(ANALYSIS_SR),
+        "-f",
+        "f32le",
+        "-",
+    ]
     try:
         proc = subprocess.run(cmd, capture_output=True, timeout=600, check=False)
     except subprocess.TimeoutExpired as exc:
@@ -80,9 +96,11 @@ def load_audio(path: str | Path, max_duration_s: float = 3 * 3600, min_duration_
         raise
     except Exception:  # libsndfile cannot read it; ffmpeg may
         try:
-            data, sr = _decode_ffmpeg(path)
+            data, sr = _decode_ffmpeg(path, max_duration_s)
         except AudioDecodeError as exc:
             raise AudioDecodeError(f"could not decode audio ({exc})") from None
+        if len(data) / sr > max_duration_s:
+            raise AudioDecodeError(f"audio longer than limit ({max_duration_s:.0f}s)") from None
     if data.size == 0:
         raise AudioDecodeError("audio contains no samples")
     if not np.all(np.isfinite(data)):
