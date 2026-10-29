@@ -17,10 +17,14 @@
 
   <main>
     <section class="card" id="upload-card">
-      <h2>New evaluation batch</h2>
-      <p class="muted">Upload a folder or ZIP containing audio files and one CSV manifest
-        with columns <code>name</code> and optional <code>result_json</code>.
-        Supported audio: WAV, MP3, OGG/Opus, FLAC (more with ffmpeg).</p>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">WORKSPACE</p>
+          <h1>Evaluate a batch</h1>
+          <p class="muted">Upload calls to get consistent, reviewable audio assessments.</p>
+        </div>
+        <span class="method-pill" id="method-pill">Acoustic baseline</span>
+      </div>
       <div class="upload-row">
         <label class="button">Choose folder
           <input id="folder-input" type="file" webkitdirectory directory multiple hidden>
@@ -34,49 +38,118 @@
       <button id="start" disabled>Upload and analyze</button>
       <progress id="upload-progress" max="100" value="0" hidden></progress>
       <p id="upload-error" class="error" role="alert"></p>
+      <p class="muted small upload-note">Labels are used only for comparison after inference, never as model input.</p>
     </section>
 
     <section class="card" id="job-card" hidden>
       <div class="job-head">
-        <h2>Batch <span id="job-id"></span></h2>
+        <div>
+          <p class="eyebrow">EVALUATION</p>
+          <h2>Batch <span id="job-id"></span></h2>
+        </div>
         <span id="job-status" class="badge"></span>
         <span class="spacer"></span>
         <button id="resume" hidden>Resume</button>
-        <a id="dl-csv" class="button">predictions.csv</a>
-        <a id="dl-json" class="button">results.json</a>
-        <a id="dl-err" class="button">errors.csv</a>
+        <details class="download-menu">
+          <summary class="button">Download results</summary>
+          <div class="download-options">
+            <a id="dl-csv">Predictions CSV</a>
+            <a id="dl-json">Full results JSON</a>
+            <a id="dl-err">Errors CSV</a>
+          </div>
+        </details>
       </div>
       <progress id="job-progress" max="100" value="0"></progress>
       <p id="job-summary" class="muted"></p>
       <div id="job-messages"></div>
-      <div id="score"></div>
-      <div class="filters">
-        <label>Show
-          <select id="filter">
-            <option value="all">all files</option>
-            <option value="failed">failed</option>
-            <option value="done">completed</option>
-            <option value="mismatch">label mismatches</option>
-            <option value="warn">with warnings</option>
-          </select>
-        </label>
+
+      <nav class="tabs" aria-label="Evaluation views">
+        <button class="tab active" type="button" data-tab="overview" aria-selected="true">Overview</button>
+        <button class="tab" type="button" data-tab="table" aria-selected="false">File results</button>
+      </nav>
+
+      <div id="overview-panel" class="tab-panel">
+        <div class="metric-grid">
+          <article class="metric-card"><span>Completed</span><strong id="metric-completed">—</strong><small id="metric-completion-note">files</small></article>
+          <article class="metric-card"><span>Audio analyzed</span><strong id="metric-audio">—</strong><small>minutes</small></article>
+          <article class="metric-card"><span>Processing time</span><strong id="metric-processing">—</strong><small>seconds</small></article>
+          <article class="metric-card cost-card"><span>Estimated total compute</span><strong id="metric-cost">—</strong><small id="metric-cost-note">for completed files</small></article>
+          <article class="metric-card cost-card"><span>Estimated cost / audio minute</span><strong id="metric-cost-minute">—</strong><small>compute estimate</small></article>
+        </div>
+
+        <details class="cost-settings">
+          <summary>Cost estimate assumptions</summary>
+          <div class="cost-controls">
+            <label>Instance price (USD/hour)
+              <input id="hourly-price" type="number" min="0.001" max="10000" step="0.01" value="0.05">
+            </label>
+            <label>Average utilization
+              <select id="utilization">
+                <option value="1">100% — busy inference</option>
+                <option value="0.5">50%</option>
+                <option value="0.1" selected>10% — planning estimate</option>
+                <option value="0.02">2% — low volume</option>
+              </select>
+            </label>
+            <p class="muted small">Single-stream-equivalent estimate = measured processing time × assumed instance price, adjusted for utilization; it does not discount parallel workers. Excludes idle hosting, storage, network, monitoring, and Azure billing minimums. Defaults are illustrative—not an Azure quote. Assumptions apply in this browser session.</p>
+            <p id="cost-input-error" class="error small" role="alert" hidden>Enter a valid positive hourly rate and utilization to calculate cost.</p>
+          </div>
+        </details>
+
+        <div class="chart-grid">
+          <section class="chart-card">
+            <h3>Prediction breakdown</h3>
+            <p class="muted small">Completed files by category</p>
+            <div id="prediction-charts" class="bar-chart-grid"></div>
+          </section>
+          <section class="chart-card">
+            <h3>Confidence distribution</h3>
+            <p class="muted small">Heuristic confidence is not calibrated probability.</p>
+            <div id="confidence-chart" class="confidence-chart"></div>
+          </section>
+        </div>
+        <section class="chart-card agreement-card" id="score-panel">
+          <h3>Agreement with supplied labels</h3>
+          <p id="score-note" class="muted small"></p>
+          <div id="score"></div>
+        </section>
       </div>
-      <div class="table-wrap">
-        <table id="results">
-          <thead>
-            <tr>
-              <th>File</th><th>Status</th><th>Tone</th><th>Intensity</th><th>Noise</th><th>Noise type</th>
-              <th>Severity</th><th>Quality</th><th>Overlap</th><th>Long silence</th><th>Confidence</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+
+      <div id="table-panel" class="tab-panel" hidden>
+        <div class="table-toolbar">
+          <div>
+            <h3>File-level results</h3>
+            <p class="muted small">Compare predictions, processing cost, and any supplied labels.</p>
+          </div>
+          <label>Filter files
+            <select id="filter">
+              <option value="all">All files</option>
+              <option value="failed">Failed</option>
+              <option value="done">Completed</option>
+              <option value="mismatch">Label mismatches</option>
+              <option value="warn">With warnings</option>
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table id="results">
+            <thead>
+              <tr>
+                <th>File</th><th>Status</th><th>Duration</th><th>Tone</th><th>Intensity</th><th>Noise</th><th>Noise type</th>
+                <th>Severity</th><th>Quality</th><th>Overlap</th><th>Long silence</th><th>Confidence</th><th>Est. compute</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted small">Per-file cost is based on measured processing time and the visible estimate assumptions. Expected values are shown below predictions when supplied labels disagree.</p>
       </div>
-      <p class="muted small">When labels are present, mismatching cells show the expected value below the prediction.</p>
     </section>
 
     <section class="card">
-      <h2>Previous batches</h2>
+      <div class="section-heading compact">
+        <div><p class="eyebrow">HISTORY</p><h2>Previous batches</h2></div>
+      </div>
       <ul id="job-list" class="job-list"></ul>
     </section>
   </main>

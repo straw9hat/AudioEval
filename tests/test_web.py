@@ -104,6 +104,8 @@ def test_full_batch_workflow(client):
     assert job["status"] == "completed_with_errors"
     items = {i["name"]: i for i in job["items"]}
     assert items["call_001.wav"]["status"] == "done"
+    assert items["call_001.wav"]["duration_s"] > 0
+    assert items["call_001.wav"]["processing_s"] >= 0
     assert items["broken.wav"]["status"] == "failed" and items["broken.wav"]["error"]
     assert "not found" in items["missing.wav"]["error"]
     assert job["score"]["n_scored"] == 2

@@ -100,7 +100,10 @@ $env:AUDIOEVAL_COOKIE_SECURE = 'false'                      # plain-HTTP localho
 ```
 
 Open http://127.0.0.1:8000, sign in, choose a folder or ZIP, and select **Upload and analyze**.
-Progress, per-file status, errors, label comparisons, and downloads appear on the same page.
+The dashboard has an overview with prediction and confidence charts plus label agreement, and
+a separate file-results table with per-file status, duration, and estimated inference cost.
+Cost estimates use editable hourly-price and utilization assumptions for measured processing
+time only; they are not Azure bills and exclude idle hosting and other platform charges.
 
 ### Short review walkthrough
 

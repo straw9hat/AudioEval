@@ -4,6 +4,20 @@ const FIELDS = [
   "emotional_tone", "emotional_intensity", "background_noise_present", "background_noise_type",
   "background_noise_severity", "audio_quality", "speaker_overlap_present", "long_silence_present", "confidence",
 ];
+const PREDICTION_FIELDS = [
+  ["emotional_tone", "Tone"],
+  ["emotional_intensity", "Intensity"],
+  ["background_noise_present", "Background noise"],
+  ["background_noise_type", "Noise type"],
+  ["audio_quality", "Audio quality"],
+  ["speaker_overlap_present", "Speaker overlap"],
+];
+const CONFIDENCE_BINS = [
+  { label: "0–39%", min: 0, max: 0.4 },
+  { label: "40–59%", min: 0.4, max: 0.6 },
+  { label: "60–79%", min: 0.6, max: 0.8 },
+  { label: "80–100%", min: 0.8, max: 1.01 },
+];
 const $ = (id) => document.getElementById(id);
 let csrf = "";
 let selection = [];
@@ -86,10 +100,125 @@ function mismatch(item) {
   return FIELDS.some((f) => f !== "confidence" && f in item.label && item.label[f] !== item.prediction[f]);
 }
 
+function costInputs() {
+  const hourlyPrice = Number($("hourly-price").value);
+  const utilization = Number($("utilization").value);
+  if (!Number.isFinite(hourlyPrice) || hourlyPrice <= 0 || hourlyPrice > 10000 ||
+      !Number.isFinite(utilization) || utilization <= 0 || utilization > 1) return null;
+  return { hourlyPrice, utilization };
+}
+
+function itemCost(item, inputs) {
+  if (!inputs || item.status !== "done" || !Number.isFinite(item.processing_s) ||
+      !Number.isFinite(item.duration_s) || item.processing_s < 0 || item.duration_s <= 0) return null;
+  return {
+    amount: inputs.hourlyPrice * item.processing_s / (3600 * inputs.utilization),
+    audioMinutes: item.duration_s / 60,
+  };
+}
+
+function money(value) {
+  if (!Number.isFinite(value)) return "—";
+  if (value === 0) return "$0.00";
+  if (value >= 0.01) return `$${value.toFixed(2)}`;
+  if (value < 0.000001) return "$<0.000001";
+  return `$${value.toFixed(6)}`;
+}
+
+function renderMetrics(job) {
+  const inputs = costInputs();
+  const measured = job.items.map((item) => ({ item, cost: itemCost(item, inputs) }))
+    .filter((entry) => entry.cost);
+  const timed = job.items.filter((item) => item.status === "done" && Number.isFinite(item.processing_s) &&
+    Number.isFinite(item.duration_s) && item.processing_s >= 0 && item.duration_s > 0);
+  const totalCost = measured.reduce((sum, entry) => sum + entry.cost.amount, 0);
+  const audioMinutes = measured.reduce((sum, entry) => sum + entry.cost.audioMinutes, 0);
+  const timedAudioMinutes = timed.reduce((sum, item) => sum + item.duration_s / 60, 0);
+  const summary = job.summary || {};
+  $("metric-completed").textContent = `${summary.done || 0}/${summary.total || 0}`;
+  $("metric-completion-note").textContent = `${summary.failed || 0} failed`;
+  $("metric-audio").textContent = timedAudioMinutes ? timedAudioMinutes.toFixed(2) : "—";
+  $("metric-processing").textContent = timed.length
+    ? timed.reduce((sum, item) => sum + item.processing_s, 0).toFixed(2)
+    : "—";
+  $("metric-cost").textContent = inputs ? money(totalCost) : "—";
+  $("metric-cost-minute").textContent = inputs && audioMinutes ? money(totalCost / audioMinutes) : "—";
+  $("metric-cost-note").textContent = inputs
+    ? `${measured.length} file(s) with measured processing`
+    : "Correct assumptions to calculate";
+  $("cost-input-error").hidden = inputs !== null;
+  $("score-note").textContent = job.score
+    ? "Labels are only used for comparison, never as model input. Small batches are not a reliable accuracy estimate."
+    : "No scored labels are available for this batch.";
+}
+
+function renderPredictionCharts(job) {
+  const container = $("prediction-charts");
+  container.replaceChildren();
+  const completed = job.items.filter((item) => item.status === "done" && item.prediction);
+  if (!completed.length) {
+    container.append(el("p", "Predictions will appear when files finish processing.", "muted small"));
+    return;
+  }
+  for (const [field, title] of PREDICTION_FIELDS) {
+    const counts = new Map();
+    for (const item of completed) {
+      const value = item.prediction[field];
+      if (value !== undefined && value !== null && value !== "") {
+        const label = String(fmt(value));
+        counts.set(label, (counts.get(label) || 0) + 1);
+      }
+    }
+    if (!counts.size) continue;
+    const group = el("div", null, "bar-group");
+    group.append(el("h4", title));
+    const max = Math.max(...counts.values());
+    for (const [label, count] of [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+      const row = el("div", null, "bar-row");
+      const text = el("span", label, "bar-label");
+      const track = el("span", null, "bar-track");
+      const bar = el("span", null, "bar-fill");
+      bar.style.width = `${100 * count / max}%`;
+      track.append(bar);
+      row.append(text, track, el("strong", count, "bar-count"));
+      group.append(row);
+    }
+    container.append(group);
+  }
+}
+
+function renderConfidenceChart(job) {
+  const container = $("confidence-chart");
+  container.replaceChildren();
+  const values = job.items
+    .filter((item) => item.status === "done" && item.prediction)
+    .map((item) => Number(item.prediction.confidence))
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 1);
+  if (!values.length) {
+    container.append(el("p", "No confidence scores available yet.", "muted small"));
+    return;
+  }
+  const counts = CONFIDENCE_BINS.map((bin) => values.filter((value) => value >= bin.min && value < bin.max).length);
+  const max = Math.max(1, ...counts);
+  for (let i = 0; i < CONFIDENCE_BINS.length; i += 1) {
+    const column = el("div", null, "confidence-column");
+    const count = el("strong", counts[i]);
+    const track = el("span", null, "confidence-track");
+    const bar = el("span", null, "confidence-fill");
+    bar.style.height = `${100 * counts[i] / max}%`;
+    track.append(bar);
+    column.append(count, track, el("span", CONFIDENCE_BINS[i].label, "small"));
+    container.append(column);
+  }
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  container.append(el("p", `Average: ${(100 * average).toFixed(1)}% across ${values.length} file(s)`, "muted small confidence-average"));
+}
+
 function renderItems(job) {
   const tbody = document.querySelector("#results tbody");
   tbody.replaceChildren();
   const filter = $("filter").value;
+  const inputs = costInputs();
   for (const item of job.items) {
     if (filter === "failed" && item.status !== "failed") continue;
     if (filter === "done" && item.status !== "done") continue;
@@ -104,6 +233,7 @@ function renderItems(job) {
     status.append(el("span", item.status, `badge ${item.status}`));
     if (item.error) status.append(el("div", item.error, "error small"));
     tr.append(status);
+    tr.append(el("td", Number.isFinite(item.duration_s) ? `${item.duration_s.toFixed(2)} s` : "—"));
     for (const f of FIELDS) {
       const td = el("td");
       if (item.prediction) {
@@ -115,6 +245,8 @@ function renderItems(job) {
       }
       tr.append(td);
     }
+    const cost = itemCost(item, inputs);
+    tr.append(el("td", cost ? money(cost.amount) : "—"));
     tbody.append(tr);
   }
 }
@@ -123,8 +255,7 @@ function renderScore(score) {
   const box = $("score");
   box.replaceChildren();
   if (!score) return;
-  box.append(el("h3", `Agreement with supplied labels (${score.n_scored} files)`));
-  box.append(el("p", "Labels are only used for this comparison, never as model input. Small batches are not a reliable accuracy estimate.", "muted small"));
+  box.append(el("p", `${score.n_scored} file(s) scored against supplied labels.`, "muted small"));
   const table = el("table", null, "score-table");
   const head = el("tr");
   ["Field", "Accuracy", "Macro F1"].forEach((h) => head.append(el("th", h)));
@@ -133,7 +264,18 @@ function renderScore(score) {
     const tr = el("tr");
     tr.append(el("td", field));
     const acc = m.accuracy ?? m.normalized_match;
-    tr.append(el("td", acc === undefined || acc === null ? "-" : `${(100 * acc).toFixed(1)}%`));
+    const accuracy = el("td");
+    if (acc === undefined || acc === null) {
+      accuracy.textContent = "-";
+    } else {
+      accuracy.append(el("strong", `${(100 * acc).toFixed(1)}%`));
+      const track = el("span", null, "agreement-track");
+      const bar = el("span", null, "agreement-fill");
+      bar.style.width = `${Math.max(0, Math.min(100, 100 * acc))}%`;
+      track.append(bar);
+      accuracy.append(track);
+    }
+    tr.append(accuracy);
     tr.append(el("td", m.macro_f1 === undefined || m.macro_f1 === null ? "-" : m.macro_f1.toFixed(3)));
     table.append(tr);
   }
@@ -155,6 +297,10 @@ function showJob(job) {
   if (s.real_time_factor) parts.push(`real-time factor ${s.real_time_factor}`);
   if (job.manifest) parts.push(`manifest: ${job.manifest}`);
   $("job-summary").textContent = parts.join(" | ");
+  if (job.method) {
+    $("method").textContent = `method: ${job.method}`;
+    $("method-pill").textContent = job.method;
+  }
   const msgs = $("job-messages");
   msgs.replaceChildren();
   for (const e of job.errors || []) msgs.append(el("div", e, "error"));
@@ -164,6 +310,9 @@ function showJob(job) {
     $(id).href = `/api/jobs/${encodeURIComponent(job.id)}/download/${kind}`;
   }
   $("resume").hidden = job.status !== "interrupted";
+  renderMetrics(job);
+  renderPredictionCharts(job);
+  renderConfidenceChart(job);
   renderScore(job.score);
   renderItems(job);
   clearTimeout(pollTimer);
@@ -199,6 +348,7 @@ async function init() {
   csrf = me.csrf;
   $("user").textContent = me.user;
   $("method").textContent = me.method ? `method: ${me.method}` : "";
+  if (me.method) $("method-pill").textContent = me.method;
   $("folder-input").addEventListener("change", (e) => setSelection(e.target.files, true));
   $("files-input").addEventListener("change", (e) => setSelection(e.target.files, false));
   const drop = $("drop");
@@ -211,6 +361,25 @@ async function init() {
   });
   $("start").addEventListener("click", upload);
   $("filter").addEventListener("change", () => currentJob && renderItems(currentJob));
+  for (const control of [$("hourly-price"), $("utilization")]) {
+    control.addEventListener("input", () => {
+      if (currentJob) {
+        renderMetrics(currentJob);
+        renderItems(currentJob);
+      }
+    });
+  }
+  for (const tab of document.querySelectorAll(".tab")) {
+    tab.addEventListener("click", () => {
+      for (const candidate of document.querySelectorAll(".tab")) {
+        const selected = candidate === tab;
+        candidate.classList.toggle("active", selected);
+        candidate.setAttribute("aria-selected", String(selected));
+      }
+      $("overview-panel").hidden = tab.dataset.tab !== "overview";
+      $("table-panel").hidden = tab.dataset.tab !== "table";
+    });
+  }
   $("resume").addEventListener("click", async () => {
     showJob(await api(`/api/jobs/${encodeURIComponent(currentJob.id)}/resume`, { method: "POST" }));
   });
